@@ -28,6 +28,7 @@ Si el WiFi falla, la red `Cultivo-XXXX` vuelve a aparecer para reconfigurarlo. M
 - **Iluminación:** horario por cada relé de luz: 12/12, 16/8, 18/6, 20/4 o personalizado (horas prendida/apagada libres, por ej. 13/13) y hora de encendido.
 - **Temperatura y humedad:** rangos de día y de noche (con presets por etapa), histéresis y renovación de aire. Extractor e intractor prenden si hace calor, si hay humedad de más o en la renovación; las salidas asignables pueden ser humidificador, deshumidificador o calefactor.
 - **Riego:** hasta 8 riegos por salida (hora + segundos), asistente que los reparte en el horario de luz, “Regar ahora” y una guía rápida.
+- **Historial:** día (cada 5 min), semana (por hora) y mes (por día) con temperatura, humedad y VPD (promedio y mín–máx), más horas de luz, coolers y tiempo de riego por día. Semana y mes se guardan en la flash y sobreviven cortes de luz (35 días).
 - **Ajustes:** WiFi, nombres y función de cada relé, polaridad del módulo, offset de hoja, clave del AP y zona horaria.
 
 En modo **Auto** cada relé sigue su automatización; On/Off lo fuerza a mano. Si el sensor falla, los coolers quedan prendidos y humidificador/deshumidificador/calefactor apagados. Sin hora válida, luces y riego en Auto quedan apagados.
@@ -36,13 +37,19 @@ La página está en `web/index.html`; al compilar, `tools/embed_web.py` la compr
 
 La configuración (nombres, tipos y modo de cada relé, offset de hoja para el VPD, clave del AP, zona horaria) queda guardada en la memoria flash y sobrevive a cortes de luz. Los relés arrancan siempre apagados hasta leer la config.
 
+## Acceso desde cualquier lado
+
+- **Telegram (recomendado):** en Ajustes > Telegram cargás el token de un bot creado con @BotFather y tu chat id. Desde cualquier lado: `/estado`, `/luces on|off|auto`, `/rele N on|off|auto`, `/regar N SEG`. Avisa si la temperatura o la humedad se van de rango más de 10 min, si falla el sensor o si el equipo se reinició (corte de luz). No hace falta tocar el router.
+- **Panel web completo:** con una VPN hacia tu casa. Lo más simple es [Tailscale](https://tailscale.com) en una compu o Raspberry que quede prendida en tu casa, configurada como *subnet router*, y la app de Tailscale en el celular: entrás a la IP del equipo como si estuvieras en tu WiFi. Si tu router trae VPN (WireGuard/OpenVPN) sirve igual.
+- No conviene abrir un puerto del router hacia el ESP32: la página va sin cifrar. Si igual lo hacés, poné contraseña en Ajustes.
+
 ## API
 
 | Método | Ruta | Cuerpo |
 |---|---|---|
 | GET | `/api/status` | — lecturas, hora, WiFi y estado de relés |
 | POST | `/api/relay` | `{"id":0,"mode":"on"\|"off"\|"auto"}` o `{"id":4,"pulse":30}` (prender N segundos) |
-| GET | `/api/history` | — últimas 24 h (cada 5 min) |
+| GET | `/api/history?range=day\|week\|month` | — día: cada 5 min; semana: por hora; mes: por día |
 | GET/POST | `/api/config` | ver `GET` para el formato; en `POST` se mandan solo los campos a cambiar |
 | GET | `/api/wifi/scan` | — (llamar hasta que devuelva `networks`) |
 | POST | `/api/wifi` | `{"ssid":"...","pass":"..."}` |

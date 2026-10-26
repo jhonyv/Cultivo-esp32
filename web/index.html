@@ -42,6 +42,8 @@ label{display:block;font-size:.85rem;color:var(--mut)}label input,label select{m
 .tip summary{cursor:pointer;font-weight:600}
 table{width:100%;border-collapse:collapse}td,th{padding:5px 4px;text-align:left;font-size:.9rem}th{color:var(--mut);font-weight:500}
 canvas{width:100%;height:190px;display:block}
+.hc{height:170px}.rng{margin-bottom:12px}
+.tbl td,.tbl th{white-space:nowrap;font-variant-numeric:tabular-nums}.tbl td{border-top:1px solid var(--line)}
 .legend{display:flex;gap:14px;font-size:.8rem;color:var(--mut);margin-top:6px}.legend i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--card2);border:1px solid var(--line);padding:10px 16px;border-radius:10px;opacity:0;transition:.3s;pointer-events:none}
 .toast.show{opacity:1}
@@ -92,6 +94,16 @@ canvas{width:100%;height:190px;display:block}
 </ul></details>
 <div id="irrig"></div></section>
 
+<section id="historial"><h2>📈 Historial</h2>
+<div class="seg rng" id="rangeSel"></div>
+<div class="card"><div class="grid" id="hStats"></div></div>
+<div class="card"><h3>Temperatura (°C)</h3><canvas class="hc" id="hcT"></canvas><div class="legend" id="hlT"></div></div>
+<div class="card"><h3>Humedad (%)</h3><canvas class="hc" id="hcH"></canvas></div>
+<div class="card"><h3>VPD (kPa)</h3><canvas class="hc" id="hcV"></canvas></div>
+<div class="card"><h3>Por día</h3><div style="overflow-x:auto;margin-top:8px"><table class="tbl" id="hTable"></table></div></div>
+<div class="mut">El día se guarda en memoria cada 5 min (se pierde si se corta la luz). Semana y mes quedan guardados en el equipo por hora, hasta 35 días.</div>
+</section>
+
 <section id="ajustes"><h2>⚙️ Ajustes</h2>
 <div class="card" data-nodirty><h3>WiFi</h3><div id="wst" class="mut" style="margin:6px 0"></div>
 <div class="row"><select id="ssid"><option value="">Elegí una red…</option></select><button class="btn sec" onclick="scan()">Buscar redes</button></div>
@@ -103,6 +115,18 @@ canvas{width:100%;height:190px;display:block}
 <label>Módulo de relés<select id="alow"><option value="1">Activo en bajo (común)</option><option value="0">Activo en alto</option></select></label></div>
 <div class="row"><label>Clave de la red Cultivo (vacía = abierta)<input id="appw"></label><label>Zona horaria (POSIX)<input id="tz"></label></div>
 <div class="actions"><button class="btn" onclick="saveDevice()">Guardar</button><button class="btn sec" onclick="syncTime()">Usar hora del celular</button><button class="btn sec" onclick="restart()">Reiniciar</button></div></div>
+<div class="card"><h3>Telegram: control y alertas desde cualquier lado</h3>
+<details class="tip" style="margin:8px 0"><summary>Cómo configurarlo (2 minutos)</summary><ol style="margin:8px 0;padding-left:20px;line-height:1.5">
+<li>En Telegram buscá <b>@BotFather</b>, mandale <code>/newbot</code> y elegí un nombre. Te da un <b>token</b>.</li>
+<li>Pegá el token acá abajo y tocá Guardar.</li>
+<li>Abrí tu bot nuevo y mandale <code>/start</code>: te contesta con tu <b>chat id</b>. Pegalo acá y guardá.</li>
+<li>Listo: <code>/estado</code>, <code>/luces on|off|auto</code>, <code>/rele 3 on</code>, <code>/regar 5 30</code>. Te avisa si la temperatura o la humedad se van de rango por más de 10 min, si falla el sensor o si se cortó la luz.</li></ol></details>
+<div class="row"><label>Token del bot<input id="tgToken" type="password" autocomplete="off"></label><label>Chat id<input id="tgChat" inputmode="numeric"></label></div>
+<label style="display:flex;gap:8px;align-items:center;color:var(--fg)"><input type="checkbox" id="tgAlerts"> Mandarme alertas</label>
+<div class="actions"><button class="btn" onclick="saveTelegram()">Guardar</button><button class="btn sec" onclick="saveTelegram(true)">Desactivar bot</button><span class="mut" id="tgSt"></span></div></div>
+<div class="card"><h3>Contraseña de la página</h3><div class="mut">Usuario <b>cultivo</b>. Recomendada si vas a entrar desde fuera de tu casa.</div>
+<div class="row"><label>Nueva contraseña<input id="webPw" type="password" autocomplete="new-password"></label></div>
+<div class="actions"><button class="btn" onclick="saveWebPw()">Guardar</button><button class="btn sec" onclick="saveWebPw(true)">Quitar contraseña</button><span class="mut" id="pwSt"></span></div></div>
 </section>
 </main>
 <div class="toast" id="toast"></div>
@@ -112,7 +136,7 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
 const TYPES={generic:'Sin asignar',light:'Luz',fan_out:'Extractor',fan_in:'Intractor',irrigation:'Riego',humidifier:'Humidificador',dehumidifier:'Deshumidificador',heater:'Calefactor'};
 const AUX=['generic','humidifier','dehumidifier','heater'];
 const MODES=[['off','Off'],['auto','Auto'],['on','On']];
-const SECTIONS=[['inicio','🏠','Inicio'],['luz','💡','Iluminación'],['clima','🌡️','Temperatura y humedad'],['riego','💧','Riego'],['ajustes','⚙️','Ajustes']];
+const SECTIONS=[['inicio','🏠','Inicio'],['luz','💡','Iluminación'],['clima','🌡️','Temperatura y humedad'],['riego','💧','Riego'],['historial','📈','Historial'],['ajustes','⚙️','Ajustes']];
 const LIGHT_PRESETS=[[12,12],[16,8],[18,6],[20,4]];
 const STAGES={'Esquejes':{day:{tMin:22,tMax:28,hMin:65,hMax:80},night:{tMin:20,tMax:26,hMin:65,hMax:80}},
  'Vegetativo':{day:{tMin:22,tMax:28,hMin:55,hMax:70},night:{tMin:18,tMax:24,hMin:55,hMax:70}},
@@ -253,11 +277,18 @@ function refreshStates(p,status){S.relays.forEach((r,i)=>{const c=$(p+i);if(!c)r
 function renderSettings(){
  const w=S.wifi;$('wst').textContent=w.connected?`Conectado a ${w.ssid} · IP ${w.ip} · ${w.rssi} dBm`:(w.ssid?`Sin conexión a ${w.ssid}`:'Sin red configurada')+(w.ap?` · red "${w.apSsid}" activa`:'');
  if(dirty.has('ajustes'))return;
+ $('tgSt').textContent=C.telegramTokenSet?'Bot activo':'Bot desactivado';$('pwSt').textContent=C.webPasswordSet?'Con contraseña':'Sin contraseña';
+ $('tgToken').placeholder=C.telegramTokenSet?'guardado (vacío = no cambiar)':'123456789:AA...';$('tgChat').value=C.telegramChat;$('tgAlerts').checked=C.telegramAlerts;
  $('leaf').value=C.leafOffset;$('alow').value=C.relayActiveLow?1:0;$('appw').value=C.apPassword;$('tz').value=C.tz;
  $('cfgr').innerHTML=C.relays.map((r,i)=>`<tr><td class="mut">${i+1}</td><td><input id="n${i}" maxlength="23" value="${esc(r.name)}"></td><td><select id="y${i}">${Object.entries(TYPES).map(([k,l])=>`<option value="${k}" ${k==r.type?'selected':''}>${l}</option>`).join('')}</select></td></tr>`).join('');
 }
 async function saveDevice(){const relays=C.relays.map((_,i)=>({name:$('n'+i).value,type:$('y'+i).value}));
  C=await call('/api/config',{relays,leafOffset:+$('leaf').value,relayActiveLow:$('alow').value=='1',apPassword:$('appw').value,tz:$('tz').value},'Ajustes guardados');dirty.delete('ajustes');await refresh()}
+async function saveTelegram(off){const b=off?{telegramToken:''}:{telegramChat:$('tgChat').value.trim(),telegramAlerts:$('tgAlerts').checked};
+ if(!off&&$('tgToken').value.trim())b.telegramToken=$('tgToken').value.trim();
+ C=await call('/api/config',b,off?'Bot desactivado':'Telegram guardado');$('tgToken').value='';dirty.delete('ajustes');renderSettings()}
+async function saveWebPw(off){const pw=off?'':$('webPw').value;if(!off&&pw.length<4)return toast('Usá al menos 4 caracteres',true);
+ C=await call('/api/config',{webPassword:pw},off?'Contraseña quitada':'Contraseña guardada: el navegador te la va a pedir');$('webPw').value='';dirty.delete('ajustes');renderSettings()}
 async function scan(){$('wmsg').textContent='Buscando…';for(let k=0;k<20;k++){const r=await api('/api/wifi/scan');if(r.networks){$('ssid').innerHTML='<option value="">Elegí una red…</option>'+r.networks.sort((a,b)=>b.rssi-a.rssi).map(n=>`<option>${esc(n.ssid)}</option>`).join('');$('wmsg').textContent=r.networks.length+' redes';return}await new Promise(r=>setTimeout(r,1000))}$('wmsg').textContent='No se pudo escanear'}
 async function saveWifi(){const ssid=$('ssidm').value||$('ssid').value;if(!ssid)return;await call('/api/wifi',{ssid,pass:$('pass').value});$('wmsg').textContent='Conectando… después entrá a http://cultivo.local o a la IP que aparezca acá.'}
 async function forget(){if(confirm('¿Borrar la red guardada y reiniciar?'))await call('/api/wifi/forget',{})}
@@ -283,8 +314,61 @@ function drawChart(){
 }
 window.addEventListener('resize',drawChart);
 
+// ---------- historial ----------
+let HR='day',HD=null;
+const RANGES=[['day','Día'],['week','Semana'],['month','Mes']];
+const pad2=n=>String(n).padStart(2,'0');
+const WD=['dom','lun','mar','mié','jue','vie','sáb'];
+const fmtDay=ms=>{const d=new Date(ms);return WD[d.getDay()]+' '+d.getDate()+'/'+(d.getMonth()+1)};
+async function loadRange(r){if(r)HR=r;$('rangeSel').innerHTML=RANGES.map(([k,l])=>`<button class="${HR==k?'sel':''}" onclick="loadRange('${k}')">${l}</button>`).join('');
+ try{HD=await api('/api/history?range='+HR);renderHist()}catch(e){}}
+// Agrupa registros por hora en días (hora local).
+function hoursToDays(d){const out=[];d.ts.forEach((ts,k)=>{const dt=new Date(ts*1000);dt.setHours(0,0,0,0);let x=out[out.length-1];
+ if(!x||x.ts!=dt/1000){x={ts:dt/1000,ts_:[],t:[],tn:[],tx:[],h:[],hn:[],hx:[],v:[],light:0,fan:0,irr:0};out.push(x)}
+ ['t','tn','tx','h','hn','hx','v'].forEach(f=>{if(d[f][k]!=null)x[f].push(d[f][k])});x.light+=d.light[k];x.fan+=d.fan[k];x.irr+=d.irr[k]});
+ const avg=a=>a.length?a.reduce((p,c)=>p+c,0)/a.length:null;
+ return out.map(x=>({ts:x.ts,t:avg(x.t),tn:x.tn.length?Math.min(...x.tn):null,tx:x.tx.length?Math.max(...x.tx):null,h:avg(x.h),hn:x.hn.length?Math.min(...x.hn):null,hx:x.hx.length?Math.max(...x.hx):null,v:avg(x.v),light:x.light,fan:x.fan,irr:x.irr}))}
+function renderHist(){if(!HD)return;
+ let xs=[],ser={},days=[],xfmt;
+ if(HR=='day'){const n=HD.t.length,now=Date.now()-HD.age*1000;xs=HD.t.map((_,k)=>now-(n-1-k)*HD.interval*1000);ser={t:HD.t,h:HD.h,v:HD.v};days=(HD.today&&HD.today.days)||[];xfmt=ms=>{const d=new Date(ms);return pad2(d.getHours())+':'+pad2(d.getMinutes())}}
+ else if(HR=='week'){xs=HD.ts.map(t=>t*1000);ser=HD;days=hoursToDays(HD);xfmt=fmtDay}
+ else{days=HD.days;xs=days.map(d=>d.ts*1000);ser={};['t','tn','tx','h','hn','hx','v'].forEach(f=>ser[f]=days.map(d=>d[f]==null?null:+d[f]));xfmt=ms=>{const d=new Date(ms);return d.getDate()+'/'+(d.getMonth()+1)}}
+ const css=getComputedStyle(document.body),col=n=>css.getPropertyValue(n).trim();
+ lineChart($('hcT'),xs,ser.t,ser.tn,ser.tx,col('--warn'),1,xfmt);lineChart($('hcH'),xs,ser.h,ser.hn,ser.hx,col('--acc2'),0,xfmt);lineChart($('hcV'),xs,ser.v,null,null,col('--acc'),2,xfmt);
+ $('hlT').innerHTML=HR=='day'?'':`<span><i style="background:${col('--warn')}"></i>promedio</span><span><i style="background:${col('--warn')};opacity:.3;height:8px"></i>mínimo a máximo</span>`;
+ // resumen
+ const num=a=>a.filter(v=>v!=null).map(Number),avg=a=>{a=num(a);return a.length?a.reduce((p,c)=>p+c,0)/a.length:null},mn=a=>{a=num(a);return a.length?Math.min(...a):null},mx=a=>{a=num(a);return a.length?Math.max(...a):null};
+ const f=(v,d)=>v==null?'--':v.toFixed(d),nd=Math.max(1,days.length);
+ const st=HR=='day'?{t:avg(ser.t),tn:mn(ser.t),tx:mx(ser.t),h:avg(ser.h),hn:mn(ser.h),hx:mx(ser.h),v:avg(ser.v)}:{t:avg(ser.t),tn:mn(ser.tn||ser.t),tx:mx(ser.tx||ser.t),h:avg(ser.h),hn:mn(ser.hn||ser.h),hx:mx(ser.hx||ser.h),v:avg(ser.v)};
+ const tot=k=>days.reduce((p,d)=>p+(+d[k]||0),0);
+ const per=HR=='day'?'hoy':'por día';
+ $('hStats').innerHTML=[['Temperatura',f(st.t,1)+' °C',`mín ${f(st.tn,1)} · máx ${f(st.tx,1)}`],['Humedad',f(st.h,0)+' %',`mín ${f(st.hn,0)} · máx ${f(st.hx,0)}`],['VPD',f(st.v,2)+' kPa','promedio'],
+  ['Luz '+per,(tot('light')/60/nd).toFixed(1)+' h',''],['Coolers '+per,(tot('fan')/60/nd).toFixed(1)+' h',''],['Riego '+per,dur(Math.round(tot('irr')/nd)),'tiempo de bomba']]
+  .map(([l,v,s])=>`<div class="tile"><div class="mut">${l}</div><div class="big" style="font-size:1.35rem">${v}</div><div class="mut">${s}</div></div>`).join('');
+ $('hTable').innerHTML=days.length?'<tr><th>Día</th><th>Temp °C</th><th>Hum %</th><th>VPD</th><th>Luz</th><th>Coolers</th><th>Riego</th></tr>'+days.slice().reverse().map(d=>`<tr><td>${fmtDay(d.ts*1000)}</td><td>${f(d.t==null?null:+d.t,1)} <span class="mut">${f(d.tn==null?null:+d.tn,0)}-${f(d.tx==null?null:+d.tx,0)}</span></td><td>${f(d.h==null?null:+d.h,0)} <span class="mut">${f(d.hn==null?null:+d.hn,0)}-${f(d.hx==null?null:+d.hx,0)}</span></td><td>${f(d.v==null?null:+d.v,2)}</td><td>${(d.light/60).toFixed(1)} h</td><td>${(d.fan/60).toFixed(1)} h</td><td>${dur(d.irr)}</td></tr>`).join(''):'<tr><td class="empty">Todavía no hay días guardados.</td></tr>';
+}
+function lineChart(cv,xs,y,lo,hi,color,dec,xfmt){
+ const dpr=window.devicePixelRatio||1,W=cv.clientWidth,Hh=cv.clientHeight;if(!W)return;cv.width=W*dpr;cv.height=Hh*dpr;
+ const g=cv.getContext('2d');g.scale(dpr,dpr);const css=getComputedStyle(document.body),col=n=>css.getPropertyValue(n).trim();
+ g.font='11px system-ui';g.fillStyle=col('--mut');
+ const vals=[...(y||[]),...(lo||[]),...(hi||[])].filter(v=>v!=null);
+ if(!vals.length||xs.length<2){g.fillText('Todavía no hay datos para este período',10,Hh/2);return}
+ let a=Math.min(...vals),b=Math.max(...vals);const m=(b-a)*.1||1;a-=m;b+=m;
+ const L=34,T=8,B=22,x0=xs[0],x1=xs[xs.length-1],X=t=>L+(W-L-8)*(t-x0)/(x1-x0||1),Y=v=>T+(Hh-T-B)*(1-(v-a)/(b-a));
+ g.strokeStyle=col('--line');g.lineWidth=1;for(let k=0;k<=3;k++){const v=a+(b-a)*k/3,yy=Y(v);g.beginPath();g.moveTo(L,yy);g.lineTo(W-8,yy);g.stroke();g.fillText(v.toFixed(dec>1?1:0),2,yy+4)}
+ for(let k=0;k<=4;k++){const t=x0+(x1-x0)*k/4,lbl=xfmt(t),w=g.measureText(lbl).width;g.fillText(lbl,Math.min(W-w-2,Math.max(L,X(t)-w/2)),Hh-6)}
+ if(lo&&hi){g.fillStyle=color;g.globalAlpha=.22;let open=false;const seg=[];
+  xs.forEach((t,k)=>{if(lo[k]==null||hi[k]==null){flush();return}seg.push(k)});flush();
+  function flush(){if(seg.length){g.beginPath();seg.forEach((k,j)=>{j?g.lineTo(X(xs[k]),Y(hi[k])):g.moveTo(X(xs[k]),Y(hi[k]))});seg.slice().reverse().forEach(k=>g.lineTo(X(xs[k]),Y(lo[k])));g.closePath();g.fill();seg.length=0}}
+  g.globalAlpha=1}
+ g.strokeStyle=color;g.lineWidth=2;g.beginPath();let pen=false;y.forEach((v,k)=>{if(v==null){pen=false;return}const px=X(xs[k]),py=Y(v);pen?g.lineTo(px,py):g.moveTo(px,py);pen=true});g.stroke();
+ const k=y.length-1;if(y[k]!=null){g.fillStyle=color;g.beginPath();g.arc(X(xs[k]),Y(y[k]),3.5,0,7);g.fill()}
+}
+window.addEventListener('resize',()=>{if(location.hash=='#historial')renderHist()});
+window.addEventListener('hashchange',()=>{if(location.hash=='#historial')loadRange()});
+
 // ---------- ciclo ----------
 async function refresh(){try{S=await api('/api/status');if(!C)C=await api('/api/config');renderAll()}catch(e){}}
 async function loadHistory(){try{H=await api('/api/history');drawChart()}catch(e){}}
-show();refresh();loadHistory();setInterval(refresh,3000);setInterval(loadHistory,60000);
+show();refresh();loadHistory();if(location.hash=='#historial')loadRange();setInterval(refresh,3000);setInterval(loadHistory,60000);
 </script></body></html>
