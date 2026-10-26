@@ -17,17 +17,48 @@ static int error(JsonDocument& out, int code, const String& msg) {
   return code;
 }
 
+// Valor de un parámetro en "a=1&b=2".
+static String param(const String& query, const char* name) {
+  String key = String(name) + "=";
+  int start = 0;
+  while (start < (int)query.length()) {
+    int end = query.indexOf('&', start);
+    if (end < 0) end = query.length();
+    if (query.substring(start, start + key.length()) == key) return query.substring(start + key.length(), end);
+    start = end + 1;
+  }
+  return "";
+}
+
 static void statusJson(JsonDocument& doc) {
-  const Climate& c = climate();
-  JsonObject cl = doc["climate"].to<JsonObject>();
-  cl["valid"] = c.valid;
-  cl["sensor"] = sensorModel();
-  if (c.valid) {
-    cl["temperature"] = serialized(String(c.temperature, 1));
-    cl["humidity"] = serialized(String(c.humidity, 1));
-    cl["vpd"] = serialized(String(c.vpd, 2));
-    cl["dewPoint"] = serialized(String(c.dewPoint, 1));
-    cl["age"] = (millis() - c.updatedMs) / 1000;
+  JsonArray tents = doc["tents"].to<JsonArray>();
+  for (uint8_t t = 0; t < NUM_TENTS; t++) {
+    JsonObject o = tents.add<JsonObject>();
+    o["name"] = settings.tents[t].name;
+    o["enabled"] = settings.tents[t].enabled;
+    o["day"] = automationIsDay(t);
+    const Climate& c = climate(t);
+    JsonObject cl = o["climate"].to<JsonObject>();
+    cl["valid"] = c.valid;
+    if (c.valid) {
+      cl["temperature"] = serialized(String(c.temperature, 1));
+      cl["humidity"] = serialized(String(c.humidity, 1));
+      cl["vpd"] = serialized(String(c.vpd, 2));
+      cl["dewPoint"] = serialized(String(c.dewPoint, 1));
+      cl["age"] = (millis() - c.updatedMs) / 1000;
+    }
+    JsonArray sensors = o["sensors"].to<JsonArray>();
+    for (uint8_t k = 0; k < SENSORS_PER_TENT; k++) {
+      SensorReading r = sensorReading(t, k);
+      JsonObject so = sensors.add<JsonObject>();
+      so["model"] = r.model;
+      so["addr"] = r.address;
+      so["valid"] = r.valid;
+      if (r.valid) {
+        so["temperature"] = serialized(String(r.temperature, 1));
+        so["humidity"] = serialized(String(r.humidity, 1));
+      }
+    }
   }
 
   JsonObject t = doc["time"].to<JsonObject>();
@@ -35,7 +66,6 @@ static void statusJson(JsonDocument& doc) {
   t["epoch"] = (uint32_t)time(nullptr);
   t["rtc"] = clockHasRtc();
   t["ntp"] = clockNtpSynced();
-  t["day"] = automationIsDay();
   if (clockValid()) {
     char buf[20];
     time_t now = time(nullptr);
@@ -61,6 +91,8 @@ static void statusJson(JsonDocument& doc) {
   for (uint8_t i = 0; i < NUM_RELAYS; i++) {
     JsonObject r = rel.add<JsonObject>();
     r["name"] = settings.relays[i].name;
+    r["tent"] = settings.relays[i].tent;
+    r["present"] = relayPresent(i);
     r["type"] = relayTypeName(settings.relays[i].type);
     r["mode"] = relayModeName(settings.relays[i].mode);
     r["on"] = relayState(i);
@@ -72,7 +104,7 @@ static void statusJson(JsonDocument& doc) {
   doc["heap"] = ESP.getFreeHeap();
 }
 
-// POST /api/relay {"id":0..7,"mode":"on"|"off"|"auto"} o {"id":0..7,"pulse":segundos}
+// POST /api/relay {"id":0..15,"mode":"on"|"off"|"auto"} o {"id":0..7,"pulse":segundos}
 static int relayPost(JsonDocument& in, JsonDocument& out) {
   int id = in["id"] | -1;
   if (id < 0 || id >= NUM_RELAYS) return error(out, 400, "id inválido");
@@ -91,13 +123,15 @@ static int relayPost(JsonDocument& in, JsonDocument& out) {
   return 200;
 }
 
-// GET /api/history?range=day|week|month
-static int historyGet(const String& range, JsonDocument& out) {
-  if (range == "week") historyHourlyToJson(out.to<JsonObject>(), 7 * 24);
-  else if (range == "month") historyDailyToJson(out.to<JsonObject>(), 31);
+// GET /api/history?range=day|week|month&tent=0|1
+static int historyGet(const String& query, JsonDocument& out) {
+  String range = param(query, "range");
+  uint8_t tent = constrain(param(query, "tent").toInt(), 0, NUM_TENTS - 1);
+  if (range == "week") historyHourlyToJson(out.to<JsonObject>(), tent, 7 * 24);
+  else if (range == "month") historyDailyToJson(out.to<JsonObject>(), tent, 31);
   else {
-    historyToJson(out.to<JsonObject>());
-    historyDailyToJson(out["today"].to<JsonObject>(), 1);
+    historyToJson(out.to<JsonObject>(), tent);
+    historyDailyToJson(out["today"].to<JsonObject>(), tent, 1);
   }
   return 200;
 }
@@ -124,14 +158,14 @@ static int timePost(JsonDocument& in, JsonDocument& out) {
   return 200;
 }
 
-int apiHandle(const String& method, const String& path, const String& range, const String& body, JsonDocument& out,
+int apiHandle(const String& method, const String& path, const String& query, const String& body, JsonDocument& out,
               bool remote) {
   bool post = method == "POST";
   JsonDocument in;
   if (post && (deserializeJson(in, body) || !in.is<JsonObject>())) return error(out, 400, "JSON inválido");
 
   if (!post && path == "/api/status") return statusJson(out), 200;
-  if (!post && path == "/api/history") return historyGet(range, out);
+  if (!post && path == "/api/history") return historyGet(query, out);
   if (!post && path == "/api/config") return settingsToJson(out.to<JsonObject>()), 200;
   if (post && path == "/api/relay") return relayPost(in, out);
   if (post && path == "/api/config") return configPost(in, out, remote);

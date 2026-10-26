@@ -52,9 +52,12 @@ canvas{width:100%;height:190px;display:block}
 .nav a{display:block;text-decoration:none;color:var(--fg)}
 #login{position:fixed;inset:0;z-index:20;background:var(--bg);overflow:auto;padding:24px 16px}#login .card{max-width:440px;margin:24px auto}
 .badge{font-size:.75rem;padding:3px 8px;border-radius:12px;background:var(--card2);border:1px solid var(--line)}.badge.ok{color:var(--acc)}.badge.bad{color:var(--err)}
+#cfgr select[id^=rt]{min-width:58px}
+#tentBar{max-width:820px;margin:auto;padding:0 16px 10px}#tentBar[hidden]{display:none}#tentBar .seg{display:flex}#tentBar .seg button{flex:1;padding:9px 12px;font-size:.95rem}
 .cloud-only{display:none}body.cloud .cloud-only{display:revert}body.cloud .local-only{display:none}
 </style></head><body>
 <header><div class="hbar"><h1>🌱 Cultivo <span class="mut" id="secName"></span></h1><span class="badge cloud-only" id="cloudBadge"></span><span class="mut" id="hdrTime"></span><button id="menuBtn" onclick="toggleMenu()">☰</button></div>
+<div id="tentBar" hidden><div class="seg" id="tentSel"></div></div>
 <nav id="menu"></nav></header>
 <main>
 
@@ -114,7 +117,8 @@ canvas{width:100%;height:190px;display:block}
 <div class="row"><select id="ssid"><option value="">Elegí una red…</option></select><button class="btn sec" onclick="scan()">Buscar redes</button></div>
 <div class="row"><input id="ssidm" placeholder="o escribí el nombre de la red"><input id="pass" type="password" placeholder="Clave"></div>
 <div class="actions"><button class="btn" onclick="saveWifi()">Conectar</button><button class="btn sec" onclick="forget()">Olvidar red</button><span class="mut" id="wmsg"></span></div></div>
-<div class="card"><h3>Relés</h3><div class="mut">Nombre y función de cada salida.</div><table id="cfgr"></table></div>
+<div class="card"><h3>Carpas</h3><div class="mut">La carpa 2 usa los relés 9-16 (módulo por PCF8574) y los sensores del segundo bus I2C.</div><div id="cfgt"></div></div>
+<div class="card"><h3>Relés</h3><div class="mut">Nombre, función y carpa de cada salida.</div><div style="overflow-x:auto"><table id="cfgr"></table></div></div>
 <div class="card"><h3>Equipo</h3>
 <div class="row"><label>Offset de hoja para VPD (°C)<input id="leaf" type="number" step="0.1"></label>
 <label>Módulo de relés<select id="alow"><option value="1">Activo en bajo (común)</option><option value="0">Activo en alto</option></select></label></div>
@@ -158,6 +162,8 @@ const STAGES={'Esquejes':{day:{tMin:22,tMax:28,hMin:65,hMax:80},night:{tMin:20,t
  'Floración':{day:{tMin:20,tMax:26,hMin:45,hMax:55},night:{tMin:18,tMax:22,hMin:45,hMax:55}},
  'Flora tardía':{day:{tMin:18,tMax:24,hMin:40,hMax:50},night:{tMin:16,tMax:21,hMin:40,hMax:50}}};
 let S=null,C=null,H=null,chartVar='th',menuOpen=false;
+// Carpa que se está mirando (los relés mantienen su número global 0-15).
+let TENT=0;try{TENT=+localStorage.getItem('cultivoTent')||0}catch(e){}
 // Secciones con cambios sin guardar: no se redibujan sus formularios para no pisar lo que se está editando.
 const dirty=new Set();
 const markDirty=e=>{const el=e.target;if(el.closest('[data-nodirty]'))return;const sec=el.closest('section');if(sec)dirty.add(sec.id)};
@@ -188,7 +194,7 @@ async function cloudConnect(c){
  })}
 function cloudApi(path,body){return new Promise((ok,fail)=>{
  if(!mq||!mq.connected)return fail(new Error('Sin conexión a la nube'));
- const [p,qs]=path.split('?'),q=qs?(new URLSearchParams(qs).get('range')||''):'';
+ const [p,qs]=path.split('?'),q=qs||'';
  const id=Math.random().toString(36).slice(2,10);
  pending[id]={ok,fail,t:setTimeout(()=>{delete pending[id];fail(new Error('El equipo no responde: ¿está prendido y con internet?'))},12000)};
  mq.publish(mqBase+'/req',JSON.stringify(body===undefined?{id,m:'GET',p,q}:{id,m:'POST',p,q,b:body}))})}
@@ -225,27 +231,36 @@ const dur=s=>s>=3600?Math.floor(s/3600)+' h '+Math.round(s%3600/60)+' min':s>=60
 const hrs=m=>(m/60).toString().replace('.',',');
 const svp=t=>0.61078*Math.exp(17.27*t/(t+237.3));
 const vpd=(t,h)=>Math.max(0,svp(t+(C?C.leafOffset:-2))-svp(t)*h/100);
-const idx=type=>S?S.relays.map((r,i)=>[r,i]).filter(([r])=>type.includes(r.type)):[];
+const mine=()=>S?S.relays.map((r,i)=>[r,i]).filter(([r])=>r.tent==TENT):[];
+const idx=type=>mine().filter(([r])=>type.includes(r.type));
+const tentS=()=>S.tents[TENT],tentC=()=>C.tents[TENT];
+const multi=()=>!!(C&&C.tents[1]&&C.tents[1].enabled);
 function seg(i,mode){return `<div class="seg">${MODES.map(([m,l])=>`<button class="${mode==m?'sel':''}" onclick="setMode(${i},'${m}')">${l}</button>`).join('')}</div>`}
 function relayLine(r,i,extra=''){return `<div class="relay"><div><span class="dot ${r.on?'on':''}"></span><b>${esc(r.name)}</b> <span class="mut">${TYPES[r.type]}</span><div class="mut" style="margin-left:19px">${r.mode=='auto'?esc(r.reason||''):r.mode=='on'?'manual: encendido':'manual: apagado'}${r.pulse?' · encendido por '+dur(r.pulse):''}${extra}</div></div>${seg(i,r.mode)}</div>`}
 function relaysArr(i,obj){const a=[];for(let k=0;k<=i;k++)a.push(k==i?obj:{});return a}
-function targets(){return S&&C?(S.time.day?C.climate.day:C.climate.night):null}
+function targets(){return S&&C?(tentS().day?tentC().climate.day:tentC().climate.night):null}
+function renderTents(){if(!multi()&&TENT){TENT=0;H=null;loadHistory()}
+ const sec=(location.hash||'#inicio').slice(1);$('tentBar').hidden=!multi()||sec=='ajustes';
+ $('tentSel').innerHTML=C.tents.map((t,k)=>`<button class="${k==TENT?'sel':''}" onclick="setTent(${k})">${esc(t.name)}</button>`).join('')}
+function setTent(k){if(k==TENT)return;TENT=k;try{localStorage.setItem('cultivoTent',k)}catch(e){}
+ ['luz','clima','riego'].forEach(d=>dirty.delete(d));H=null;HD=null;renderAll();loadHistory();if(location.hash=='#historial')loadRange()}
 
 // ---------- render ----------
-function renderAll(){if(!S||!C)return;renderHome();renderLights();renderClimate();renderIrrig();renderSettings()}
+function renderAll(){if(!S||!C)return;renderTents();renderHome();renderLights();renderClimate();renderIrrig();renderSettings()}
 function renderHome(){
- const c=S.climate,t=targets();
+ const c=tentS().climate,t=targets();
  const cls=(v,lo,hi)=>v<lo||v>hi?'warn':'ok';
  $('t').innerHTML=c.valid?`<span class="${cls(c.temperature,t.tMin,t.tMax)}">${c.temperature}°</span>`:'--';
  $('h').innerHTML=c.valid?`<span class="${cls(c.humidity,t.hMin,t.hMax)}">${c.humidity}%</span>`:'--';
  const vlo=vpd(t.tMin,t.hMax),vhi=vpd(t.tMax,t.hMin);
  $('v').innerHTML=c.valid?`<span class="${cls(c.vpd,vlo-.05,vhi+.05)}">${c.vpd}</span> <span class="mut">kPa</span>`:'--';
  $('tT').textContent=`objetivo ${t.tMin}-${t.tMax} °C`;$('hT').textContent=`objetivo ${t.hMin}-${t.hMax} %`;$('vT').textContent=`objetivo ${vlo.toFixed(1)}-${vhi.toFixed(1)}`;
- $('dayLbl').textContent=S.time.day?'☀️ Día':'🌙 Noche';
+ $('dayLbl').textContent=tentS().day?'☀️ Día':'🌙 Noche';
  $('clk').textContent=S.time.valid?S.time.local.slice(11,16):'sin hora';$('clkS').textContent=S.time.valid?S.time.local.slice(0,10):'';
  $('hdrTime').textContent=S.time.valid?S.time.local.slice(11,16):'';
- $('sens').innerHTML=c.valid?`Sensor ${c.sensor} · punto de rocío ${c.dewPoint} °C`:`<span class="bad">Sin lectura del sensor (${c.sensor})</span>`;
- $('relays').innerHTML=S.relays.map((r,i)=>relayLine(r,i)).join('');
+ const sn=tentS().sensors.map(x=>x.valid?`${x.model} 0x${x.addr.toString(16)}: ${x.temperature}° ${x.humidity}%`:`<span class="bad">0x${x.addr.toString(16)} sin sensor</span>`).join(' · ');
+ $('sens').innerHTML=(c.valid?`Punto de rocío ${c.dewPoint} °C · `:`<span class="bad">Sin lectura de clima</span> · `)+sn;
+ const R=mine();$('relays').innerHTML=R.length?R.map(([r,i])=>relayLine(r,i,r.present?'':' · <span class="bad">módulo no conectado</span>')).join(''):'<div class="empty">No hay relés en esta carpa. Asignalos en Ajustes.</div>';
  // resumen por sección
  const L=idx(['light']),F=idx(['fan_in','fan_out']),I=idx(['irrigation']);
  const lt=L.length?L.map(([r,i])=>{const l=C.relays[i].light;return `${esc(r.name)}: ${hrs(l.on)}/${hrs(l.off)} · ${r.on?'prendida':'apagada'}${r.next&&r.mode=='auto'?' · cambia en '+dur(r.next):''}`}).join('<br>'):'Sin luces asignadas';
@@ -281,7 +296,7 @@ function rangeInputs(k,t){return `<div><b>${k=='day'?'☀️ Día (luces prendid
  <label>Temp. mín (°C)<input type="number" step="0.5" id="${k}tMin" value="${t.tMin}" oninput="vpdHint()"></label><label>Temp. máx (°C)<input type="number" step="0.5" id="${k}tMax" value="${t.tMax}" oninput="vpdHint()"></label>
  <label>Hum. mín (%)<input type="number" id="${k}hMin" value="${t.hMin}" oninput="vpdHint()"></label><label>Hum. máx (%)<input type="number" id="${k}hMax" value="${t.hMax}" oninput="vpdHint()"></label></div><div class="mut" id="${k}Vpd"></div></div>`}
 function renderClimate(){
- const cl=C.climate;
+ const cl=tentC().climate;
  $('stages').innerHTML=Object.keys(STAGES).map(s=>`<button class="chip" onclick="setStage('${s}')">${s}</button>`).join('');
  if(!dirty.has('clima')){
   $('targets').innerHTML=rangeInputs('day',cl.day)+'<div style="height:10px"></div>'+rangeInputs('night',cl.night);
@@ -295,7 +310,7 @@ function readT(k){const g=n=>parseFloat($(k+n).value);return {tMin:g('tMin'),tMa
 function vpdHint(){['day','night'].forEach(k=>{const t=readT(k);$(k+'Vpd').textContent=`VPD resultante: ${vpd(t.tMin,t.hMax).toFixed(2)} a ${vpd(t.tMax,t.hMin).toFixed(2)} kPa`})}
 function setStage(s){const st=STAGES[s];['day','night'].forEach(k=>Object.entries(st[k]).forEach(([n,v])=>$(k+n).value=v));vpdHint();
  document.querySelectorAll('#stages .chip').forEach(c=>c.classList.toggle('sel',c.textContent==s));toast('Rangos de '+s+' cargados, falta guardar')}
-async function saveClimate(){C=await call('/api/config',{climate:{day:readT('day'),night:readT('night'),tempHyst:+$('tHyst').value,humHyst:+$('hHyst').value,ventOn:+$('ventOn').value,ventEvery:+$('ventEvery').value}},'Clima guardado');dirty.delete('clima');await refresh()}
+async function saveClimate(){const tents=C.tents.map(()=>({}));tents[TENT]={climate:{day:readT('day'),night:readT('night'),tempHyst:+$('tHyst').value,humHyst:+$('hHyst').value,ventOn:+$('ventOn').value,ventEvery:+$('ventEvery').value}};C=await call('/api/config',{tents},'Clima guardado');dirty.delete('clima');await refresh()}
 async function setAux(i,type){C=await call('/api/config',{relays:relaysArr(i,{type})},'Salida asignada como '+TYPES[type]);await refresh()}
 
 function renderIrrig(){
@@ -339,10 +354,12 @@ function renderSettings(){
  $('tgSt').textContent=C.telegramTokenSet?'Bot activo':'Bot desactivado';$('pwSt').textContent=C.webPasswordSet?'Con contraseña':'Sin contraseña';
  $('tgToken').placeholder=C.telegramTokenSet?'guardado (vacío = no cambiar)':'123456789:AA...';$('tgChat').value=C.telegramChat;$('tgAlerts').checked=C.telegramAlerts;
  $('leaf').value=C.leafOffset;$('alow').value=C.relayActiveLow?1:0;$('appw').value=C.apPassword;$('tz').value=C.tz;
- $('cfgr').innerHTML=C.relays.map((r,i)=>`<tr><td class="mut">${i+1}</td><td><input id="n${i}" maxlength="23" value="${esc(r.name)}"></td><td><select id="y${i}">${Object.entries(TYPES).map(([k,l])=>`<option value="${k}" ${k==r.type?'selected':''}>${l}</option>`).join('')}</select></td></tr>`).join('');
+ $('cfgt').innerHTML=C.tents.map((t,k)=>`<div class="row"><label>Nombre carpa ${k+1}<input id="tn${k}" maxlength="23" value="${esc(t.name)}"></label>${k?`<label style="display:flex;gap:8px;align-items:center;color:var(--fg)"><input type="checkbox" id="te${k}" ${t.enabled?'checked':''}> Usar esta carpa</label>`:''}</div>`).join('');
+ $('cfgr').innerHTML='<tr><th>#</th><th>Nombre</th><th>Función</th><th>Carpa</th></tr>'+C.relays.map((r,i)=>`<tr><td class="mut">${i+1}${S.relays[i].present?'':' <span class="bad" title="módulo no conectado">!</span>'}</td><td><input id="n${i}" maxlength="23" value="${esc(r.name)}"></td><td><select id="y${i}">${Object.entries(TYPES).map(([k,l])=>`<option value="${k}" ${k==r.type?'selected':''}>${l}</option>`).join('')}</select></td><td><select id="rt${i}">${C.tents.map((t,k)=>`<option value="${k}" ${k==r.tent?'selected':''}>${k+1}</option>`).join('')}</select></td></tr>`).join('');
 }
-async function saveDevice(){const relays=C.relays.map((_,i)=>({name:$('n'+i).value,type:$('y'+i).value}));
- C=await call('/api/config',{relays,leafOffset:+$('leaf').value,relayActiveLow:$('alow').value=='1',apPassword:$('appw').value,tz:$('tz').value},'Ajustes guardados');dirty.delete('ajustes');await refresh()}
+async function saveDevice(){const relays=C.relays.map((_,i)=>({name:$('n'+i).value,type:$('y'+i).value,tent:+$('rt'+i).value}));
+ const tents=C.tents.map((_,k)=>k?{name:$('tn'+k).value,enabled:$('te'+k).checked}:{name:$('tn'+k).value});
+ C=await call('/api/config',{relays,tents,leafOffset:+$('leaf').value,relayActiveLow:$('alow').value=='1',apPassword:$('appw').value,tz:$('tz').value},'Ajustes guardados');dirty.delete('ajustes');await refresh()}
 async function saveCloud(off){const b=off?{mqttHost:''}:{mqttHost:$('mqHost').value.trim(),mqttPort:+$('mqPort').value||8883,mqttUser:$('mqUser').value.trim()};
  if(!off&&$('mqPass').value)b.mqttPass=$('mqPass').value;
  C=await call('/api/config',b,off?'Nube desactivada':'Nube guardada, conectando…');$('mqPass').value='';dirty.delete('ajustes');renderSettings()}
@@ -370,8 +387,8 @@ function drawChart(){
  const pad=28,n=288;g.strokeStyle=col('--line');g.lineWidth=1;g.fillStyle=col('--mut');g.font='11px system-ui';
  for(let k=0;k<=4;k++){const y=8+(Hh-pad-8)*k/4;g.beginPath();g.moveTo(pad,y);g.lineTo(W,y);g.stroke()}
  [24,18,12,6,0].forEach((h,k)=>g.fillText(h?'-'+h+'h':'ahora',pad+(W-pad-30)*k/4,Hh-8));
- series.forEach(([d,c],si)=>{const lo=Math.min(...d)-1,hi=Math.max(...d)+1;g.strokeStyle=c;g.lineWidth=2;g.beginPath();
-  d.forEach((v,k)=>{const x=pad+(W-pad)*(n-d.length+k)/(n-1),y=8+(Hh-pad-8)*(1-(v-lo)/(hi-lo));k?g.lineTo(x,y):g.moveTo(x,y)});g.stroke();
+ series.forEach(([d,c],si)=>{const ok=d.filter(v=>v!=null);if(!ok.length)return;const lo=Math.min(...ok)-1,hi=Math.max(...ok)+1;g.strokeStyle=c;g.lineWidth=2;g.beginPath();let pen=false;
+  d.forEach((v,k)=>{if(v==null){pen=false;return}const x=pad+(W-pad)*(n-d.length+k)/(n-1),y=8+(Hh-pad-8)*(1-(v-lo)/(hi-lo));pen?g.lineTo(x,y):g.moveTo(x,y);pen=true});g.stroke();
   g.fillStyle=c;g.fillText(hi.toFixed(chartVar=='v'?1:0),si?W-26:2,16);g.fillText(lo.toFixed(chartVar=='v'?1:0),si?W-26:2,Hh-pad)});
 }
 window.addEventListener('resize',drawChart);
@@ -383,7 +400,7 @@ const pad2=n=>String(n).padStart(2,'0');
 const WD=['dom','lun','mar','mié','jue','vie','sáb'];
 const fmtDay=ms=>{const d=new Date(ms);return WD[d.getDay()]+' '+d.getDate()+'/'+(d.getMonth()+1)};
 async function loadRange(r){if(r)HR=r;$('rangeSel').innerHTML=RANGES.map(([k,l])=>`<button class="${HR==k?'sel':''}" onclick="loadRange('${k}')">${l}</button>`).join('');
- try{HD=await api('/api/history?range='+HR);renderHist()}catch(e){}}
+ try{HD=await api('/api/history?range='+HR+'&tent='+TENT);renderHist()}catch(e){}}
 // Agrupa registros por hora en días (hora local).
 function hoursToDays(d){const out=[];d.ts.forEach((ts,k)=>{const dt=new Date(ts*1000);dt.setHours(0,0,0,0);let x=out[out.length-1];
  if(!x||x.ts!=dt/1000){x={ts:dt/1000,ts_:[],t:[],tn:[],tx:[],h:[],hn:[],hx:[],v:[],light:0,fan:0,irr:0};out.push(x)}
@@ -431,7 +448,7 @@ window.addEventListener('hashchange',()=>{if(location.hash=='#historial')loadRan
 
 // ---------- ciclo ----------
 async function refresh(){try{S=await api('/api/status');if(!C)C=await api('/api/config');renderAll()}catch(e){}}
-async function loadHistory(){try{H=await api('/api/history');drawChart()}catch(e){}}
+async function loadHistory(){try{H=await api('/api/history?tent='+TENT);drawChart()}catch(e){}}
 function start(){show();refresh();loadHistory();if(location.hash=='#historial')loadRange();setInterval(refresh,CLOUD?5000:3000);setInterval(loadHistory,CLOUD?300000:60000)}
 if(CLOUD){document.body.classList.add('cloud');const c=cloudCreds();if(c)cloudConnect(c).then(start,e=>showLogin(e.message));else showLogin()}else start();
 </script></body></html>

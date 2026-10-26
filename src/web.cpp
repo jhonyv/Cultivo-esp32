@@ -97,7 +97,7 @@ static void handleNotFound() {
 
 static void handleApi() {
   JsonDocument out;
-  int code = apiHandle(server.method() == HTTP_POST ? "POST" : "GET", server.uri(), server.arg("range"), server.arg("plain"),
+  int code = apiHandle(server.method() == HTTP_POST ? "POST" : "GET", server.uri(), String("range=") + server.arg("range") + "&tent=" + server.arg("tent"), server.arg("plain"),
                        out, false);
   sendJson(out, code);
 }
