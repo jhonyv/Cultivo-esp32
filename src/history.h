@@ -1,5 +1,6 @@
 #pragma once
 #include <ArduinoJson.h>
+#include "config.h"
 
 // Historial:
 // - últimas 24 h cada 5 min, en RAM (gráfico de Inicio y vista "día");
@@ -11,6 +12,6 @@
 
 void historyBegin();
 void historyLoop();
-void historyToJson(JsonObject obj);           // 5 min, últimas 24 h
-void historyHourlyToJson(JsonObject obj, uint16_t hours);  // por hora
-void historyDailyToJson(JsonObject obj, uint8_t days);     // por día (hora local)
+void historyToJson(JsonObject obj, uint8_t tent);                         // 5 min, últimas 24 h
+void historyHourlyToJson(JsonObject obj, uint8_t tent, uint16_t hours);  // por hora
+void historyDailyToJson(JsonObject obj, uint8_t tent, uint8_t days);     // por día (hora local)

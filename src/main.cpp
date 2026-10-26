@@ -21,6 +21,7 @@ void setup() {
   relaysBegin();  // lo antes posible, para fijar los relés en apagado
 
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_FREQ);
+  relaysBeginExpander();
   clockBegin();
   historyBegin();
   sensorsBegin();

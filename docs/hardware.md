@@ -1,6 +1,6 @@
 # Hardware
 
-Pensado para una carpa de 1,5 m con 8 salidas a relé, sensor de temperatura/humedad y reloj de respaldo.
+Pensado para una carpa de 1,5 m con 8 salidas a relé, sensor de temperatura/humedad y reloj de respaldo. Se puede ampliar a **2 carpas y 16 relés** con un expansor PCF8574 y hasta 2 sensores por carpa (ver [Segunda carpa](#segunda-carpa-16-relés-y-2-sensores-por-carpa)).
 
 ## Lista de compras
 
@@ -16,6 +16,8 @@ Pensado para una carpa de 1,5 m con 8 salidas a relé, sensor de temperatura/hum
 | 1 | Termomagnética 10 A + fusibles por salida (opcional pero recomendado) | Especialmente en la salida de luces. |
 | — | Cables dupont, termocontraíble, prensacables | |
 
+Para la segunda carpa, sumá: 1 módulo de 8 relés más, 1 **PCF8574** (módulo I2C, dirección 0x20) y los sensores (hasta 2 SHT30/SHT31/SHT40 por carpa).
+
 Opcional para más adelante: humidificador ultrasónico, deshumidificador, sensor de humedad de suelo capacitivo, sensor de nivel del tanque.
 
 ## Pines
@@ -30,8 +32,11 @@ Opcional para más adelante: humidificador ultrasónico, deshumidificador, senso
 | Relé 6 – Riego 2 | 25 | |
 | Relé 7 – Asignable 1 | 26 | |
 | Relé 8 – Asignable 2 | 27 | |
-| I2C SDA (SHT + DS3231) | 21 | Bus compartido |
-| I2C SCL (SHT + DS3231) | 22 | Bus compartido |
+| I2C SDA (SHT carpa 1 + DS3231 + PCF8574) | 21 | Bus principal |
+| I2C SCL (SHT carpa 1 + DS3231 + PCF8574) | 22 | Bus principal |
+| I2C2 SDA (SHT carpa 2) | 32 | Segundo bus, solo si usás la carpa 2 |
+| I2C2 SCL (SHT carpa 2) | 33 | Segundo bus, solo si usás la carpa 2 |
+| Relés 9-16 | P0-P7 del PCF8574 | No usan GPIO del ESP32 |
 | Botón reset WiFi | 0 (BOOT) | Mantener 5 s con el equipo encendido borra la red guardada |
 | LED de estado | 2 (LED de la placa) | Fijo = conectado, parpadea = modo AP |
 
@@ -57,6 +62,33 @@ ESP32 22  ── SCL SHT40 ── SCL DS3231
 - Alimentando el lado de entrada del módulo con 3V3 y las bobinas con 5V (JD-VCC) los relés conmutan bien con la lógica de 3,3 V del ESP32 y quedan aislados.
 - El SHT y el DS3231 comparten el bus I2C (SHT 0x44, DS3231 0x68). Los breakouts ya traen pull-ups.
 - Con cable largo al SHT (>2 m) usá cable mallado y, si hay lecturas erráticas, bajá la velocidad I2C (`I2C_FREQ` en `include/config.h`).
+
+## Segunda carpa: 16 relés y 2 sensores por carpa
+
+Los GPIO libres del ESP32 no alcanzan para 8 relés más, así que los relés 9-16 van por un **PCF8574** colgado del mismo bus I2C (solo usa SDA/SCL).
+
+```
+PCF8574  VCC ── 3V3      GND ── GND
+         SDA ── GPIO21   SCL ── GPIO22
+         A0, A1, A2 ── GND        (dirección 0x20)
+         P0..P7 ── IN1..IN8 del segundo módulo de relés
+
+Segundo módulo de relés: VCC ── 3V3, JD-VCC ── 5V, GND común (igual que el primero)
+```
+
+- El PCF8574 arranca con todas las salidas en alto, o sea **relés apagados** en módulos activos en bajo (los comunes). La polaridad elegida en Ajustes vale para los dos módulos.
+- Si el PCF8574 no está conectado, el equipo funciona igual con 8 relés y la página marca los relés 9-16 como "módulo no conectado".
+
+**Sensores:** cada carpa tiene su propio bus I2C, y en cada bus entran 2 SHT: uno en **0x44** y otro en **0x45**. En los breakouts SHT30/SHT31 la dirección se elige con el pin **ADDR**: a GND = 0x44, a VCC = 0x45 (algunos traen un puente para soldar). Los SHT40 vienen de fábrica en 0x44; para el segundo comprá un SHT40-**B** (0x45) o usá un SHT31 en 0x45.
+
+| Carpa | Bus | Sensor A | Sensor B |
+|---|---|---|---|
+| 1 | GPIO21 / GPIO22 | 0x44 | 0x45 |
+| 2 | GPIO32 / GPIO33 | 0x44 | 0x45 |
+
+- El clima de cada carpa es el **promedio** de sus sensores que respondan; si uno falla se usa el otro. En Inicio se ve la lectura de cada sensor.
+- Conviene ponerlos a distinta altura (canopy y arriba) o en lados opuestos: el promedio representa mejor la carpa.
+- La carpa 2 se activa en Ajustes > Carpas; ahí también se elige a qué carpa pertenece cada relé (por defecto 1-8 carpa 1 y 9-16 carpa 2).
 
 ## 220 V – seguridad
 

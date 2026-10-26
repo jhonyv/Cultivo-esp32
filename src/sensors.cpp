@@ -1,18 +1,28 @@
 #include "sensors.h"
 #include <Wire.h>
-#include "config.h"
 #include "settings.h"
 
-// Driver mínimo para SHT3x y SHT4x (ambos en 0x44, mismo formato de respuesta).
+// Driver mínimo para SHT3x y SHT4x (mismo formato de respuesta), en 0x44 o 0x45.
 
-static const uint8_t SHT_ADDR = 0x44;
-static const uint8_t MAX_FAILS = 5;  // lecturas fallidas seguidas antes de invalidar los datos
+static const uint8_t ADDRESSES[SENSORS_PER_TENT] = {0x44, 0x45};
+static const uint8_t MAX_FAILS = 5;            // lecturas fallidas seguidas antes de invalidar el sensor
+static const uint32_t DETECT_RETRY_MS = 30000;  // cada cuánto buscar sensores que no están
 
 enum class Model : uint8_t { None, Sht3x, Sht4x };
-static Model model = Model::None;
-static Climate data = {};
+
+struct Sensor {
+  TwoWire* bus;
+  uint8_t addr;
+  Model model;
+  uint8_t fails;
+  bool valid;
+  float t, h;
+  uint32_t lastDetect;
+};
+
+static Sensor sensors[NUM_TENTS][SENSORS_PER_TENT];
+static Climate data[NUM_TENTS] = {};
 static uint32_t lastRead = 0;
-static uint8_t fails = 0;
 
 static uint8_t crc8(const uint8_t* buf, uint8_t len) {
   uint8_t crc = 0xFF;
@@ -23,20 +33,20 @@ static uint8_t crc8(const uint8_t* buf, uint8_t len) {
   return crc;
 }
 
-static bool readRaw(Model m, uint16_t& rawT, uint16_t& rawH) {
-  Wire.beginTransmission(SHT_ADDR);
+static bool readRaw(TwoWire& bus, uint8_t addr, Model m, uint16_t& rawT, uint16_t& rawH) {
+  bus.beginTransmission(addr);
   if (m == Model::Sht4x) {
-    Wire.write(0xFD);  // medición alta precisión
+    bus.write(0xFD);  // medición alta precisión
   } else {
-    Wire.write(0x24);  // single shot, alta repetibilidad, sin clock stretching
-    Wire.write(0x00);
+    bus.write(0x24);  // single shot, alta repetibilidad, sin clock stretching
+    bus.write(0x00);
   }
-  if (Wire.endTransmission() != 0) return false;
+  if (bus.endTransmission() != 0) return false;
   delay(m == Model::Sht4x ? 10 : 16);
 
   uint8_t buf[6];
-  if (Wire.requestFrom(SHT_ADDR, (uint8_t)6) != 6) return false;
-  for (uint8_t i = 0; i < 6; i++) buf[i] = Wire.read();
+  if (bus.requestFrom(addr, (uint8_t)6) != 6) return false;
+  for (uint8_t i = 0; i < 6; i++) buf[i] = bus.read();
   if (crc8(buf, 2) != buf[2] || crc8(buf + 3, 2) != buf[5]) return false;
   rawT = (buf[0] << 8) | buf[1];
   rawH = (buf[3] << 8) | buf[4];
@@ -55,16 +65,60 @@ static float calcDewPoint(float t, float rh) {
   return 237.3f * g / (17.27f - g);
 }
 
-static void detect() {
+static const char* modelName(Model m) {
+  switch (m) {
+    case Model::Sht4x: return "SHT4x";
+    case Model::Sht3x: return "SHT3x";
+    default: return "ninguno";
+  }
+}
+
+static void detect(Sensor& x) {
+  // Primero se pregunta por si responde la dirección, para no esperar mediciones de un sensor que no está.
+  x.lastDetect = millis();
+  x.bus->beginTransmission(x.addr);
+  if (x.bus->endTransmission() != 0) {
+    x.model = Model::None;
+    return;
+  }
   uint16_t t, h;
-  if (readRaw(Model::Sht4x, t, h)) model = Model::Sht4x;
-  else if (readRaw(Model::Sht3x, t, h)) model = Model::Sht3x;
-  else model = Model::None;
-  Serial.printf("[sensor] detectado: %s\n", sensorModel());
+  if (readRaw(*x.bus, x.addr, Model::Sht4x, t, h)) x.model = Model::Sht4x;
+  else if (readRaw(*x.bus, x.addr, Model::Sht3x, t, h)) x.model = Model::Sht3x;
+  else x.model = Model::None;
+  if (x.model != Model::None) Serial.printf("[sensor] %s en 0x%02X (bus %d)\n", modelName(x.model), x.addr, x.bus == &Wire ? 1 : 2);
+}
+
+static void readSensor(Sensor& x) {
+  if (x.model == Model::None) {
+    x.valid = false;
+    if (x.lastDetect && millis() - x.lastDetect < DETECT_RETRY_MS) return;
+    detect(x);
+    if (x.model == Model::None) return;
+  }
+  uint16_t rawT, rawH;
+  if (!readRaw(*x.bus, x.addr, x.model, rawT, rawH)) {
+    if (++x.fails >= MAX_FAILS) {
+      x.valid = false;
+      x.model = Model::None;  // reintentar detección (sensor desconectado/reconectado)
+      x.fails = 0;
+      Serial.printf("[sensor] 0x%02X sin lecturas válidas\n", x.addr);
+    }
+    return;
+  }
+  x.fails = 0;
+  x.t = -45.0f + 175.0f * rawT / 65535.0f;
+  float h = x.model == Model::Sht4x ? -6.0f + 125.0f * rawH / 65535.0f : 100.0f * rawH / 65535.0f;
+  x.h = constrain(h, 0.0f, 100.0f);
+  x.valid = true;
 }
 
 void sensorsBegin() {
-  detect();
+  Wire1.begin(PIN_I2C2_SDA, PIN_I2C2_SCL, I2C_FREQ);
+  for (uint8_t t = 0; t < NUM_TENTS; t++) {
+    for (uint8_t k = 0; k < SENSORS_PER_TENT; k++) {
+      sensors[t][k] = {t == 0 ? &Wire : &Wire1, ADDRESSES[k], Model::None, 0, false, 0, 0, 0};
+    }
+  }
   sensorsLoop();
 }
 
@@ -72,44 +126,34 @@ void sensorsLoop() {
   if (lastRead && millis() - lastRead < SENSOR_INTERVAL_MS) return;
   lastRead = millis();
 
-  if (model == Model::None) {
-    detect();
-    if (model == Model::None) {
-      data.valid = false;
-      return;
+  for (uint8_t t = 0; t < NUM_TENTS; t++) {
+    float sumT = 0, sumH = 0;
+    uint8_t n = 0;
+    for (uint8_t k = 0; k < SENSORS_PER_TENT; k++) {
+      Sensor& x = sensors[t][k];
+      readSensor(x);
+      if (!x.valid) continue;
+      sumT += x.t;
+      sumH += x.h;
+      n++;
     }
-  }
-
-  uint16_t rawT, rawH;
-  if (!readRaw(model, rawT, rawH)) {
-    if (++fails >= MAX_FAILS) {
-      data.valid = false;
-      model = Model::None;  // reintentar detección (sensor desconectado/reconectado)
-      fails = 0;
-      Serial.println("[sensor] sin lecturas válidas");
+    Climate& c = data[t];
+    if (!n) {
+      c.valid = false;
+      continue;
     }
-    return;
+    c.temperature = sumT / n;
+    c.humidity = sumH / n;
+    c.vpd = calcVpd(c.temperature, c.humidity, settings.leafOffset);
+    c.dewPoint = c.humidity > 0 ? calcDewPoint(c.temperature, c.humidity) : NAN;
+    c.updatedMs = millis();
+    c.valid = true;
   }
-  fails = 0;
-
-  float t = -45.0f + 175.0f * rawT / 65535.0f;
-  float h = model == Model::Sht4x ? -6.0f + 125.0f * rawH / 65535.0f : 100.0f * rawH / 65535.0f;
-  h = constrain(h, 0.0f, 100.0f);
-
-  data.temperature = t;
-  data.humidity = h;
-  data.vpd = calcVpd(t, h, settings.leafOffset);
-  data.dewPoint = h > 0 ? calcDewPoint(t, h) : NAN;
-  data.updatedMs = millis();
-  data.valid = true;
 }
 
-const Climate& climate() { return data; }
+const Climate& climate(uint8_t tent) { return data[tent < NUM_TENTS ? tent : 0]; }
 
-const char* sensorModel() {
-  switch (model) {
-    case Model::Sht4x: return "SHT4x";
-    case Model::Sht3x: return "SHT3x";
-    default: return "ninguno";
-  }
+SensorReading sensorReading(uint8_t tent, uint8_t index) {
+  const Sensor& x = sensors[tent][index];
+  return {modelName(x.model), x.addr, x.valid, x.t, x.h};
 }

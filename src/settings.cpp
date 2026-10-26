@@ -61,6 +61,7 @@ static void formatHHMM(char* buf, size_t len, int minutes) { snprintf(buf, len, 
 static void setRelay(uint8_t i, const char* name, RelayType type) {
   RelayConfig& r = settings.relays[i];
   strlcpy(r.name, name, sizeof(r.name));
+  r.tent = i / 8;
   r.type = type;
   r.mode = RelayMode::Off;
   r.light = {18 * 60, 6 * 60, anchorFromStart(6 * 60)};
@@ -68,20 +69,28 @@ static void setRelay(uint8_t i, const char* name, RelayType type) {
 }
 
 static void settingsDefaults() {
-  setRelay(0, "Luz 1", RelayType::Light);
-  setRelay(1, "Luz 2", RelayType::Light);
-  setRelay(2, "Extractor", RelayType::FanOut);
-  setRelay(3, "Intractor", RelayType::FanIn);
-  setRelay(4, "Riego 1", RelayType::Irrigation);
-  setRelay(5, "Riego 2", RelayType::Irrigation);
-  setRelay(6, "Asignable 1", RelayType::Generic);
-  setRelay(7, "Asignable 2", RelayType::Generic);
-  settings.climate.day = {22, 28, 55, 70};
-  settings.climate.night = {18, 24, 50, 70};
-  settings.climate.tempHyst = 0.5f;
-  settings.climate.humHyst = 3.0f;
-  settings.climate.ventOnMin = 5;
-  settings.climate.ventEveryMin = 30;
+  // Cada carpa arranca con la misma distribución: 2 luces, extractor, intractor, 2 riegos y 2 asignables.
+  for (uint8_t t = 0; t < NUM_TENTS; t++) {
+    uint8_t b = t * 8;
+    setRelay(b + 0, "Luz 1", RelayType::Light);
+    setRelay(b + 1, "Luz 2", RelayType::Light);
+    setRelay(b + 2, "Extractor", RelayType::FanOut);
+    setRelay(b + 3, "Intractor", RelayType::FanIn);
+    setRelay(b + 4, "Riego 1", RelayType::Irrigation);
+    setRelay(b + 5, "Riego 2", RelayType::Irrigation);
+    setRelay(b + 6, "Asignable 1", RelayType::Generic);
+    setRelay(b + 7, "Asignable 2", RelayType::Generic);
+
+    TentConfig& tc = settings.tents[t];
+    snprintf(tc.name, sizeof(tc.name), "Carpa %u", t + 1);
+    tc.enabled = t == 0;
+    tc.climate.day = {22, 28, 55, 70};
+    tc.climate.night = {18, 24, 50, 70};
+    tc.climate.tempHyst = 0.5f;
+    tc.climate.humHyst = 3.0f;
+    tc.climate.ventOnMin = 5;
+    tc.climate.ventEveryMin = 30;
+  }
   settings.relayActiveLow = true;
   settings.leafOffset = -2.0f;
   strlcpy(settings.apPassword, AP_PASSWORD_DEFAULT, sizeof(settings.apPassword));
@@ -175,6 +184,25 @@ static bool eventsFromJson(JsonArrayConst arr, RelayConfig& r, String& error) {
   return true;
 }
 
+static void climateToJson(const ClimateConfig& cfg, JsonObject c) {
+  targetsToJson(cfg.day, c["day"].to<JsonObject>());
+  targetsToJson(cfg.night, c["night"].to<JsonObject>());
+  c["tempHyst"] = cfg.tempHyst;
+  c["humHyst"] = cfg.humHyst;
+  c["ventOn"] = cfg.ventOnMin;
+  c["ventEvery"] = cfg.ventEveryMin;
+}
+
+static bool climateFromJson(JsonObjectConst c, ClimateConfig& cfg, String& error) {
+  if (c.isNull()) return true;
+  if (!targetsFromJson(c["day"], cfg.day, error) || !targetsFromJson(c["night"], cfg.night, error)) return false;
+  if (c["tempHyst"].is<float>()) cfg.tempHyst = constrain(c["tempHyst"].as<float>(), 0.1f, 5.0f);
+  if (c["humHyst"].is<float>()) cfg.humHyst = constrain(c["humHyst"].as<float>(), 0.5f, 20.0f);
+  if (c["ventOn"].is<int>()) cfg.ventOnMin = constrain(c["ventOn"].as<int>(), 0, 1440);
+  if (c["ventEvery"].is<int>()) cfg.ventEveryMin = constrain(c["ventEvery"].as<int>(), 0, 1440);
+  return true;
+}
+
 void settingsToJson(JsonObject obj, bool secrets) {
   obj["relayActiveLow"] = settings.relayActiveLow;
   obj["leafOffset"] = settings.leafOffset;
@@ -198,6 +226,7 @@ void settingsToJson(JsonObject obj, bool secrets) {
   for (uint8_t i = 0; i < NUM_RELAYS; i++) {
     JsonObject r = arr.add<JsonObject>();
     r["name"] = settings.relays[i].name;
+    r["tent"] = settings.relays[i].tent;
     r["type"] = relayTypeName(settings.relays[i].type);
     r["mode"] = relayModeName(settings.relays[i].mode);
     lightToJson(settings.relays[i].light, r["light"].to<JsonObject>());
@@ -212,18 +241,19 @@ void settingsToJson(JsonObject obj, bool secrets) {
       o["en"] = x.enabled;
     }
   }
-  JsonObject c = obj["climate"].to<JsonObject>();
-  targetsToJson(settings.climate.day, c["day"].to<JsonObject>());
-  targetsToJson(settings.climate.night, c["night"].to<JsonObject>());
-  c["tempHyst"] = settings.climate.tempHyst;
-  c["humHyst"] = settings.climate.humHyst;
-  c["ventOn"] = settings.climate.ventOnMin;
-  c["ventEvery"] = settings.climate.ventEveryMin;
+  JsonArray tents = obj["tents"].to<JsonArray>();
+  for (uint8_t t = 0; t < NUM_TENTS; t++) {
+    JsonObject o = tents.add<JsonObject>();
+    o["name"] = settings.tents[t].name;
+    o["enabled"] = settings.tents[t].enabled;
+    climateToJson(settings.tents[t].climate, o["climate"].to<JsonObject>());
+  }
 }
 
 bool settingsFromJson(JsonObjectConst obj, String& error) {
   // Se valida sobre una copia para no dejar la config a medio aplicar.
-  Settings s = settings;
+  static Settings s;  // estática: es grande para la pila
+  s = settings;
 
   if (obj["relayActiveLow"].is<bool>()) s.relayActiveLow = obj["relayActiveLow"];
   if (obj["leafOffset"].is<float>()) {
@@ -257,6 +287,14 @@ bool settingsFromJson(JsonObjectConst obj, String& error) {
   for (uint8_t i = 0; i < arr.size() && i < NUM_RELAYS; i++) {
     JsonObjectConst r = arr[i];
     if (r["name"].is<const char*>()) strlcpy(s.relays[i].name, r["name"], sizeof(s.relays[i].name));
+    if (r["tent"].is<int>()) {
+      int t = r["tent"];
+      if (t < 0 || t >= NUM_TENTS) {
+        error = String("Carpa inválida en relé ") + (i + 1);
+        return false;
+      }
+      s.relays[i].tent = t;
+    }
     if (r["type"].is<const char*>() && !relayTypeFromName(r["type"], s.relays[i].type)) {
       error = String("Tipo inválido en relé ") + (i + 1);
       return false;
@@ -271,15 +309,19 @@ bool settingsFromJson(JsonObjectConst obj, String& error) {
     }
   }
 
-  JsonObjectConst c = obj["climate"];
-  if (!c.isNull()) {
-    if (!targetsFromJson(c["day"], s.climate.day, error) || !targetsFromJson(c["night"], s.climate.night, error))
+  // Config de antes de las 2 carpas: "climate" suelto es el de la carpa 1.
+  if (!climateFromJson(obj["climate"], s.tents[0].climate, error)) return false;
+  JsonArrayConst tents = obj["tents"];
+  for (uint8_t t = 0; t < tents.size() && t < NUM_TENTS; t++) {
+    JsonObjectConst o = tents[t];
+    if (o["name"].is<const char*>()) strlcpy(s.tents[t].name, o["name"], sizeof(s.tents[t].name));
+    if (o["enabled"].is<bool>()) s.tents[t].enabled = o["enabled"];
+    if (!climateFromJson(o["climate"], s.tents[t].climate, error)) {
+      error = String(s.tents[t].name) + ": " + error;
       return false;
-    if (c["tempHyst"].is<float>()) s.climate.tempHyst = constrain(c["tempHyst"].as<float>(), 0.1f, 5.0f);
-    if (c["humHyst"].is<float>()) s.climate.humHyst = constrain(c["humHyst"].as<float>(), 0.5f, 20.0f);
-    if (c["ventOn"].is<int>()) s.climate.ventOnMin = constrain(c["ventOn"].as<int>(), 0, 1440);
-    if (c["ventEvery"].is<int>()) s.climate.ventEveryMin = constrain(c["ventEvery"].as<int>(), 0, 1440);
+    }
   }
+  s.tents[0].enabled = true;  // la carpa 1 siempre existe
 
   settings = s;
   return true;

@@ -2,6 +2,8 @@
 
 Controlador de carpa de cultivo con ESP32: 8 relés (luces, extractor/intractor, riego y 2 asignables), sensor SHT40/SHT31 de temperatura y humedad con cálculo de VPD, reloj DS3231 de respaldo y panel web.
 
+Se amplía a **2 carpas y 16 relés** sumando un PCF8574 y un segundo módulo de relés, con hasta 2 sensores SHT por carpa (promediados). La página tiene un selector Carpa 1 / Carpa 2 y cada carpa lleva su clima, horarios, alertas e historial. Ver [docs/hardware.md](docs/hardware.md).
+
 - Hardware, lista de compras y pines: [docs/hardware.md](docs/hardware.md)
 
 ## Compilar y cargar
@@ -48,9 +50,9 @@ La configuración (nombres, tipos y modo de cada relé, offset de hoja para el V
 
 | Método | Ruta | Cuerpo |
 |---|---|---|
-| GET | `/api/status` | — lecturas, hora, WiFi y estado de relés |
+| GET | `/api/status` | — lecturas por carpa y por sensor, hora, WiFi y estado de relés |
 | POST | `/api/relay` | `{"id":0,"mode":"on"\|"off"\|"auto"}` o `{"id":4,"pulse":30}` (prender N segundos) |
-| GET | `/api/history?range=day\|week\|month` | — día: cada 5 min; semana: por hora; mes: por día |
+| GET | `/api/history?range=day\|week\|month&tent=0\|1` | — día: cada 5 min; semana: por hora; mes: por día (por carpa) |
 | GET/POST | `/api/config` | ver `GET` para el formato; en `POST` se mandan solo los campos a cambiar |
 | GET | `/api/wifi/scan` | — (llamar hasta que devuelva `networks`) |
 | POST | `/api/wifi` | `{"ssid":"...","pass":"..."}` |

@@ -6,11 +6,11 @@
 
 static const char* reasons[NUM_RELAYS];
 static uint32_t nextLightChange[NUM_RELAYS];
-static bool isDay = true;
+static bool isDay[NUM_TENTS] = {true, true};
 static uint32_t lastRun = 0;
 
-// Estados con histéresis, para no prender y apagar a cada rato cerca del límite.
-static bool hot = false, cold = false, humHigh = false, humLow = false;
+// Estados con histéresis por carpa, para no prender y apagar a cada rato cerca del límite.
+static bool hot[NUM_TENTS], cold[NUM_TENTS], humHigh[NUM_TENTS], humLow[NUM_TENTS];
 
 static void hysteresis(bool& state, bool turnOn, bool turnOff) {
   if (turnOn) state = true;
@@ -40,12 +40,12 @@ static bool irrigationOn(const RelayConfig& r, time_t now) {
 }
 
 static void updateLights(time_t now, bool clockOk) {
-  bool anyLight = false, anyOn = false;
+  bool anyLight[NUM_TENTS] = {}, anyOn[NUM_TENTS] = {};
   for (uint8_t i = 0; i < NUM_RELAYS; i++) {
     const RelayConfig& r = settings.relays[i];
     nextLightChange[i] = 0;
     if (r.type != RelayType::Light) continue;
-    anyLight = true;
+    anyLight[r.tent] = true;
     bool on = false;
     if (!clockOk) {
       reasons[i] = "sin hora";
@@ -54,52 +54,54 @@ static void updateLights(time_t now, bool clockOk) {
       reasons[i] = on ? "horario: encendida" : "horario: apagada";
     }
     relaySetAuto(i, on);
-    if (r.mode != RelayMode::Off && relayState(i)) anyOn = true;
+    if (r.mode != RelayMode::Off && relayState(i)) anyOn[r.tent] = true;
   }
   // Sin luces controladas por el equipo se usan siempre los objetivos de día.
-  isDay = !anyLight || anyOn;
+  for (uint8_t t = 0; t < NUM_TENTS; t++) isDay[t] = !anyLight[t] || anyOn[t];
 }
 
 static void updateClimate(time_t now, bool clockOk) {
-  const Climate& c = climate();
-  const ClimateConfig& cfg = settings.climate;
-  const ClimateTargets& t = isDay ? cfg.day : cfg.night;
-
-  if (c.valid) {
-    hysteresis(hot, c.temperature > t.tempMax, c.temperature < t.tempMax - cfg.tempHyst);
-    hysteresis(cold, c.temperature < t.tempMin, c.temperature > t.tempMin + cfg.tempHyst);
-    hysteresis(humHigh, c.humidity > t.humMax, c.humidity < t.humMax - cfg.humHyst);
-    hysteresis(humLow, c.humidity < t.humMin, c.humidity > t.humMin + cfg.humHyst);
-  }
-
-  bool vent = false;
-  if (cfg.ventOnMin && cfg.ventEveryMin) {
-    uint32_t minutes = clockOk ? now / 60 : millis() / 60000;
-    vent = minutes % cfg.ventEveryMin < cfg.ventOnMin;
+  bool vent[NUM_TENTS] = {};
+  for (uint8_t t = 0; t < NUM_TENTS; t++) {
+    const Climate& c = climate(t);
+    const ClimateConfig& cfg = settings.tents[t].climate;
+    const ClimateTargets& tg = isDay[t] ? cfg.day : cfg.night;
+    if (c.valid) {
+      hysteresis(hot[t], c.temperature > tg.tempMax, c.temperature < tg.tempMax - cfg.tempHyst);
+      hysteresis(cold[t], c.temperature < tg.tempMin, c.temperature > tg.tempMin + cfg.tempHyst);
+      hysteresis(humHigh[t], c.humidity > tg.humMax, c.humidity < tg.humMax - cfg.humHyst);
+      hysteresis(humLow[t], c.humidity < tg.humMin, c.humidity > tg.humMin + cfg.humHyst);
+    }
+    if (cfg.ventOnMin && cfg.ventEveryMin) {
+      uint32_t minutes = clockOk ? now / 60 : millis() / 60000;
+      vent[t] = minutes % cfg.ventEveryMin < cfg.ventOnMin;
+    }
   }
 
   for (uint8_t i = 0; i < NUM_RELAYS; i++) {
     bool on = false;
     const char* why = nullptr;
+    uint8_t t = settings.relays[i].tent;
+    const Climate& c = climate(t);
     switch (settings.relays[i].type) {
       case RelayType::FanOut:
       case RelayType::FanIn:
         if (!c.valid) on = true, why = "sin sensor: ventilando";
-        else if (hot) on = true, why = "temperatura alta";
-        else if (humHigh) on = true, why = "humedad alta";
-        else if (vent) on = true, why = "renovación de aire";
+        else if (hot[t]) on = true, why = "temperatura alta";
+        else if (humHigh[t]) on = true, why = "humedad alta";
+        else if (vent[t]) on = true, why = "renovación de aire";
         else why = "clima en rango";
         break;
       case RelayType::Humidifier:
-        on = c.valid && humLow;
+        on = c.valid && humLow[t];
         why = !c.valid ? "sin sensor" : on ? "humedad baja" : "humedad en rango";
         break;
       case RelayType::Dehumidifier:
-        on = c.valid && humHigh;
+        on = c.valid && humHigh[t];
         why = !c.valid ? "sin sensor" : on ? "humedad alta" : "humedad en rango";
         break;
       case RelayType::Heater:
-        on = c.valid && cold;
+        on = c.valid && cold[t];
         why = !c.valid ? "sin sensor" : on ? "temperatura baja" : "temperatura en rango";
         break;
       default:
@@ -137,6 +139,6 @@ void automationLoop() {
   updateIrrigation(now, clockOk);
 }
 
-bool automationIsDay() { return isDay; }
+bool automationIsDay(uint8_t tent) { return isDay[tent < NUM_TENTS ? tent : 0]; }
 const char* automationReason(uint8_t i) { return i < NUM_RELAYS && reasons[i] ? reasons[i] : ""; }
 uint32_t automationNextLightChange(uint8_t i) { return i < NUM_RELAYS ? nextLightChange[i] : 0; }

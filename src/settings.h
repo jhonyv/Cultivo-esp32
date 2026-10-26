@@ -33,6 +33,7 @@ struct IrrigationEvent {
 
 struct RelayConfig {
   char name[24];
+  uint8_t tent;  // carpa a la que pertenece (0 o 1)
   RelayType type;
   RelayMode mode;
   LightSchedule light;  // usado si type == Light
@@ -51,9 +52,15 @@ struct ClimateConfig {
   uint16_t ventOnMin, ventEveryMin;  // renovación de aire: extractor X min cada Y min (0 = desactivado)
 };
 
+struct TentConfig {
+  char name[24];
+  bool enabled;
+  ClimateConfig climate;
+};
+
 struct Settings {
   RelayConfig relays[NUM_RELAYS];
-  ClimateConfig climate;
+  TentConfig tents[NUM_TENTS];
   bool relayActiveLow;
   float leafOffset;  // °C, temperatura de hoja respecto del aire (para VPD)
   char apPassword[33];
