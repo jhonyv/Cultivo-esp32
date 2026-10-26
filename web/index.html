@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cultivo</title>
+<style>
+:root{color-scheme:dark;--bg:#0f130e;--card:#182016;--card2:#1f2a1c;--line:#2a3626;--fg:#e8eee2;--mut:#8d9c87;--acc:#7bc950;--acc2:#4fa3d9;--warn:#e0b341;--err:#e5694d;--off:#33402f}
+*{box-sizing:border-box}html,body{margin:0}body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg);font-size:15px}
+header{position:sticky;top:0;z-index:5;background:rgba(15,19,14,.95);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+.hbar{max-width:820px;margin:auto;display:flex;align-items:center;gap:10px;padding:10px 16px}
+.hbar h1{font-size:1.1rem;margin:0;flex:1}.hbar .mut{font-size:.8rem}
+#menuBtn{background:var(--card2);border:1px solid var(--line);color:var(--fg);border-radius:10px;padding:8px 12px;font-size:1rem;cursor:pointer}
+#menu{display:none;max-width:820px;margin:auto;padding:0 16px 12px}#menu.open{display:grid;gap:6px}
+#menu a{display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:10px;background:var(--card);color:var(--fg);text-decoration:none}
+#menu a.sel{background:var(--acc);color:#10140f;font-weight:600}
+main{max-width:820px;margin:auto;padding:14px 16px 40px}
+section{display:none}section.show{display:block}
+h2{font-size:1.15rem;margin:4px 0 12px}h3{font-size:1rem;margin:0}
+.card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.tile{background:var(--card2);border-radius:12px;padding:12px}
+.big{font-size:1.7rem;font-weight:650;line-height:1.2}.mut{color:var(--mut);font-size:.85rem}
+.ok{color:var(--acc)}.warn{color:var(--warn)}.bad{color:var(--err)}
+.relay{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.relay:first-child{border-top:0;padding-top:0}
+.dot{width:11px;height:11px;border-radius:50%;background:var(--off);display:inline-block;margin-right:8px;vertical-align:middle;flex:none}
+.dot.on{background:var(--acc);box-shadow:0 0 8px var(--acc)}
+.seg{display:inline-flex;border-radius:9px;overflow:hidden;border:1px solid var(--line)}
+.seg button{border:0;padding:7px 12px;background:var(--off);color:var(--fg);cursor:pointer;font:inherit;font-size:.85rem}
+.seg button.sel{background:var(--acc);color:#10140f;font-weight:650}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chip{border:1px solid var(--line);background:var(--card2);color:var(--fg);padding:7px 12px;border-radius:20px;cursor:pointer;font:inherit;font-size:.9rem}
+.chip.sel{background:var(--acc);border-color:var(--acc);color:#10140f;font-weight:650}
+input,select{background:#0c100b;color:var(--fg);border:1px solid #334030;border-radius:9px;padding:8px;font:inherit;width:100%}
+input[type=checkbox]{width:auto}input:disabled{opacity:.5}
+label{display:block;font-size:.85rem;color:var(--mut)}label input,label select{margin-top:4px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:10px 0}
+.btn{background:var(--acc);color:#10140f;border:0;border-radius:9px;padding:10px 14px;font:inherit;font-weight:650;cursor:pointer}
+.btn.sec{background:var(--card2);color:var(--fg);border:1px solid var(--line);font-weight:500}
+.btn.sm{padding:6px 10px;font-size:.85rem}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
+.rhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.tip{background:var(--card2);border-left:3px solid var(--acc2);border-radius:8px;padding:10px 12px;font-size:.9rem;line-height:1.45}
+.tip summary{cursor:pointer;font-weight:600}
+table{width:100%;border-collapse:collapse}td,th{padding:5px 4px;text-align:left;font-size:.9rem}th{color:var(--mut);font-weight:500}
+canvas{width:100%;height:190px;display:block}
+.hc{height:170px}.rng{margin-bottom:12px}
+.tbl td,.tbl th{white-space:nowrap;font-variant-numeric:tabular-nums}.tbl td{border-top:1px solid var(--line)}
+.legend{display:flex;gap:14px;font-size:.8rem;color:var(--mut);margin-top:6px}.legend i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--card2);border:1px solid var(--line);padding:10px 16px;border-radius:10px;opacity:0;transition:.3s;pointer-events:none}
+.toast.show{opacity:1}
+.empty{color:var(--mut);font-style:italic}
+.nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.nav a{display:block;text-decoration:none;color:var(--fg)}
+#login{position:fixed;inset:0;z-index:20;background:var(--bg);overflow:auto;padding:24px 16px}#login .card{max-width:440px;margin:24px auto}
+.badge{font-size:.75rem;padding:3px 8px;border-radius:12px;background:var(--card2);border:1px solid var(--line)}.badge.ok{color:var(--acc)}.badge.bad{color:var(--err)}
+.cloud-only{display:none}body.cloud .cloud-only{display:revert}body.cloud .local-only{display:none}
+</style></head><body>
+<header><div class="hbar"><h1>🌱 Cultivo <span class="mut" id="secName"></span></h1><span class="badge cloud-only" id="cloudBadge"></span><span class="mut" id="hdrTime"></span><button id="menuBtn" onclick="toggleMenu()">☰</button></div>
+<nav id="menu"></nav></header>
+<main>
+
+<section id="inicio">
+<div class="card"><div class="grid">
+<div class="tile"><div class="mut">Temperatura</div><div class="big" id="t">--</div><div class="mut" id="tT"></div></div>
+<div class="tile"><div class="mut">Humedad</div><div class="big" id="h">--</div><div class="mut" id="hT"></div></div>
+<div class="tile"><div class="mut">VPD hoja</div><div class="big" id="v">--</div><div class="mut" id="vT"></div></div>
+<div class="tile"><div class="mut" id="dayLbl">--</div><div class="big" id="clk" style="font-size:1.35rem">--</div><div class="mut" id="clkS"></div></div>
+</div><div class="mut" id="sens" style="margin-top:8px"></div></div>
+<div class="card"><div class="rhead"><h3>Últimas 24 h</h3><div class="seg" id="chSel"></div></div>
+<canvas id="chart"></canvas><div class="legend" id="legend"></div></div>
+<div class="nav" id="summary"></div>
+<div class="card" style="margin-top:12px"><h3 style="margin-bottom:10px">Relés</h3><div id="relays"></div></div>
+</section>
+
+<section id="luz"><h2>💡 Iluminación</h2><div id="lights"></div>
+<div class="tip">El horario sigue funcionando sin WiFi gracias al reloj DS3231. Un ciclo personalizado que no suma 24 h (por ej. 13/13) arranca hoy a la hora de encendido y después corre solo.</div></section>
+
+<section id="clima"><h2>🌡️ Temperatura y humedad</h2>
+<div class="card"><h3>Etapa</h3><div class="mut">Carga rangos sugeridos; después los podés ajustar.</div><div class="chips" id="stages"></div></div>
+<div class="card" id="targets"></div>
+<div class="card"><h3>Ajuste fino</h3>
+<div class="row"><label>Histéresis temp. (°C)<input id="tHyst" type="number" step="0.1"></label><label>Histéresis hum. (%)<input id="hHyst" type="number" step="0.5"></label></div>
+<div class="row"><label>Renovación: extractor (min)<input id="ventOn" type="number" min="0"></label><label>cada (min)<input id="ventEvery" type="number" min="0"></label></div>
+<div class="mut">La renovación prende el extractor aunque el clima esté en rango, para cambiar el aire (CO₂). 0 la desactiva.</div></div>
+<div class="card"><h3 style="margin-bottom:6px">Ventilación</h3><div id="fans"></div></div>
+<div class="card"><h3>Salidas asignables</h3><div class="mut" style="margin-bottom:6px">Asignales humidificador, deshumidificador o calefactor y quedan atadas a los rangos de arriba.</div><div id="aux"></div></div>
+<div class="actions"><button class="btn" onclick="saveClimate()">Guardar clima</button></div></section>
+
+<section id="riego"><h2>💧 Riego</h2>
+<details class="tip card" id="riegoTip"><summary>¿Cómo conviene regar? (guía rápida)</summary>
+<p>En carpa lo más práctico es una <b>bomba en un tanque</b> con goteros o anillos de riego, prendida por tiempo.</p>
+<ul>
+<li><b>Calibrá la bomba:</b> prendela 60 s con “Regar ahora” en un balde y medí cuánto tiró. Así sabés cuántos segundos son X litros.</li>
+<li><b>Varios riegos cortos</b> rinden más que uno largo: el sustrato no se encharca y las raíces respiran.</li>
+<li><b>Con luces prendidas:</b> el primero 1 h después de encender, el último 2-3 h antes de apagar. De noche la planta casi no toma agua.</li>
+<li><b>Tierra/sustrato:</b> 1-2 riegos por día buscando ~10-20 % de drenaje. <b>Coco:</b> 3-6 pulsos chicos por día.</li>
+<li>Empezá corto, mirá el peso de la maceta y el drenaje, y subí de a poco. Para más adelante se puede sumar un sensor de humedad de suelo o de nivel del tanque.</li>
+</ul></details>
+<div id="irrig"></div></section>
+
+<section id="historial"><h2>📈 Historial</h2>
+<div class="seg rng" id="rangeSel"></div>
+<div class="card"><div class="grid" id="hStats"></div></div>
+<div class="card"><h3>Temperatura (°C)</h3><canvas class="hc" id="hcT"></canvas><div class="legend" id="hlT"></div></div>
+<div class="card"><h3>Humedad (%)</h3><canvas class="hc" id="hcH"></canvas></div>
+<div class="card"><h3>VPD (kPa)</h3><canvas class="hc" id="hcV"></canvas></div>
+<div class="card"><h3>Por día</h3><div style="overflow-x:auto;margin-top:8px"><table class="tbl" id="hTable"></table></div></div>
+<div class="mut">El día se guarda en memoria cada 5 min (se pierde si se corta la luz). Semana y mes quedan guardados en el equipo por hora, hasta 35 días.</div>
+</section>
+
+<section id="ajustes"><h2>⚙️ Ajustes</h2>
+<div class="card cloud-only" data-nodirty><h3>Panel en la nube</h3><div class="mut" style="margin:6px 0">Estás manejando el equipo por internet. El WiFi y la conexión a la nube solo se cambian desde tu red local.</div>
+<div class="actions"><button class="btn sec" onclick="cloudLogout()">Cerrar sesión en este dispositivo</button></div></div>
+<div class="card local-only" data-nodirty><h3>WiFi</h3><div id="wst" class="mut" style="margin:6px 0"></div>
+<div class="row"><select id="ssid"><option value="">Elegí una red…</option></select><button class="btn sec" onclick="scan()">Buscar redes</button></div>
+<div class="row"><input id="ssidm" placeholder="o escribí el nombre de la red"><input id="pass" type="password" placeholder="Clave"></div>
+<div class="actions"><button class="btn" onclick="saveWifi()">Conectar</button><button class="btn sec" onclick="forget()">Olvidar red</button><span class="mut" id="wmsg"></span></div></div>
+<div class="card"><h3>Relés</h3><div class="mut">Nombre y función de cada salida.</div><table id="cfgr"></table></div>
+<div class="card"><h3>Equipo</h3>
+<div class="row"><label>Offset de hoja para VPD (°C)<input id="leaf" type="number" step="0.1"></label>
+<label>Módulo de relés<select id="alow"><option value="1">Activo en bajo (común)</option><option value="0">Activo en alto</option></select></label></div>
+<div class="row"><label>Clave de la red Cultivo (vacía = abierta)<input id="appw"></label><label>Zona horaria (POSIX)<input id="tz"></label></div>
+<div class="actions"><button class="btn" onclick="saveDevice()">Guardar</button><button class="btn sec" onclick="syncTime()">Usar hora del celular</button><button class="btn sec" onclick="restart()">Reiniciar</button></div></div>
+<div class="card local-only"><h3>Nube: el panel desde cualquier lado</h3>
+<details class="tip" style="margin:8px 0"><summary>Cómo configurarlo (5 minutos, gratis)</summary><ol style="margin:8px 0;padding-left:20px;line-height:1.5">
+<li>Creá una cuenta en <b>console.hivemq.cloud</b> y un cluster <b>Serverless</b> (gratis).</li>
+<li>En el cluster, entrá a <b>Access Management</b> y creá un usuario y una contraseña.</li>
+<li>Copiá la <b>URL del cluster</b> (algo como <code>abc123.s1.eu.hivemq.cloud</code>) y cargala acá con el usuario y la contraseña. Guardá.</li>
+<li>Cuando diga <b>Conectado</b>, abrí el <b>panel en la nube</b> desde el celular y poné los mismos datos y el <b>ID del equipo</b>.</li></ol></details>
+<div class="row"><label>Servidor (URL del cluster)<input id="mqHost" placeholder="abc123.s1.eu.hivemq.cloud" autocomplete="off"></label><label>Puerto<input id="mqPort" type="number" value="8883"></label></div>
+<div class="row"><label>Usuario<input id="mqUser" autocomplete="off"></label><label>Contraseña<input id="mqPass" type="password" autocomplete="off"></label></div>
+<div class="actions"><button class="btn" onclick="saveCloud()">Guardar</button><button class="btn sec" onclick="saveCloud(true)">Desactivar</button><span class="mut" id="mqSt"></span></div>
+<div class="mut" style="margin-top:8px">ID del equipo: <b id="devId">--</b> · Panel en la nube: <a id="cloudUrl" style="color:var(--acc2)" target="_blank" rel="noopener"></a></div></div>
+<div class="card"><h3>Telegram: control y alertas desde cualquier lado</h3>
+<details class="tip" style="margin:8px 0"><summary>Cómo configurarlo (2 minutos)</summary><ol style="margin:8px 0;padding-left:20px;line-height:1.5">
+<li>En Telegram buscá <b>@BotFather</b>, mandale <code>/newbot</code> y elegí un nombre. Te da un <b>token</b>.</li>
+<li>Pegá el token acá abajo y tocá Guardar.</li>
+<li>Abrí tu bot nuevo y mandale <code>/start</code>: te contesta con tu <b>chat id</b>. Pegalo acá y guardá.</li>
+<li>Listo: <code>/estado</code>, <code>/luces on|off|auto</code>, <code>/rele 3 on</code>, <code>/regar 5 30</code>. Te avisa si la temperatura o la humedad se van de rango por más de 10 min, si falla el sensor o si se cortó la luz.</li></ol></details>
+<div class="row"><label>Token del bot<input id="tgToken" type="password" autocomplete="off"></label><label>Chat id<input id="tgChat" inputmode="numeric"></label></div>
+<label style="display:flex;gap:8px;align-items:center;color:var(--fg)"><input type="checkbox" id="tgAlerts"> Mandarme alertas</label>
+<div class="actions"><button class="btn" onclick="saveTelegram()">Guardar</button><button class="btn sec" onclick="saveTelegram(true)">Desactivar bot</button><span class="mut" id="tgSt"></span></div></div>
+<div class="card"><h3>Contraseña de la página</h3><div class="mut">Usuario <b>cultivo</b>. Recomendada si vas a entrar desde fuera de tu casa.</div>
+<div class="row"><label>Nueva contraseña<input id="webPw" type="password" autocomplete="new-password"></label></div>
+<div class="actions"><button class="btn" onclick="saveWebPw()">Guardar</button><button class="btn sec" onclick="saveWebPw(true)">Quitar contraseña</button><span class="mut" id="pwSt"></span></div></div>
+</section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+const TYPES={generic:'Sin asignar',light:'Luz',fan_out:'Extractor',fan_in:'Intractor',irrigation:'Riego',humidifier:'Humidificador',dehumidifier:'Deshumidificador',heater:'Calefactor'};
+const AUX=['generic','humidifier','dehumidifier','heater'];
+const MODES=[['off','Off'],['auto','Auto'],['on','On']];
+const SECTIONS=[['inicio','🏠','Inicio'],['luz','💡','Iluminación'],['clima','🌡️','Temperatura y humedad'],['riego','💧','Riego'],['historial','📈','Historial'],['ajustes','⚙️','Ajustes']];
+const LIGHT_PRESETS=[[12,12],[16,8],[18,6],[20,4]];
+const STAGES={'Esquejes':{day:{tMin:22,tMax:28,hMin:65,hMax:80},night:{tMin:20,tMax:26,hMin:65,hMax:80}},
+ 'Vegetativo':{day:{tMin:22,tMax:28,hMin:55,hMax:70},night:{tMin:18,tMax:24,hMin:55,hMax:70}},
+ 'Floración':{day:{tMin:20,tMax:26,hMin:45,hMax:55},night:{tMin:18,tMax:22,hMin:45,hMax:55}},
+ 'Flora tardía':{day:{tMin:18,tMax:24,hMin:40,hMax:50},night:{tMin:16,tMax:21,hMin:40,hMax:50}}};
+let S=null,C=null,H=null,chartVar='th',menuOpen=false;
+// Secciones con cambios sin guardar: no se redibujan sus formularios para no pisar lo que se está editando.
+const dirty=new Set();
+const markDirty=e=>{const el=e.target;if(el.closest('[data-nodirty]'))return;const sec=el.closest('section');if(sec)dirty.add(sec.id)};
+document.addEventListener('input',markDirty);document.addEventListener('change',markDirty);
+document.addEventListener('click',e=>{if(e.target.closest('.chip,[data-dirty]'))markDirty(e)});
+
+async function realApi(p,b){const r=await fetch(p,b===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
+// ---------- nube (MQTT por WebSocket) ----------
+// Servida por https (no desde el ESP32, que es http) la página funciona en modo nube.
+const CLOUD=location.protocol=='https:'&&!window.MOCK_API;
+const CLOUD_PANEL_URL='https://jhonyv.github.io/Cultivo-esp32/';
+let mq=null,mqBase='',mqOnline=null;const pending={};
+function cloudCreds(){try{return JSON.parse(localStorage.getItem('cultivoCloud')||'null')}catch(e){return null}}
+function loadScript(src){return new Promise((ok,err)=>{const el=document.createElement('script');el.src=src;el.onload=ok;el.onerror=()=>err(new Error('No se pudo cargar '+src));document.head.appendChild(el)})}
+async function cloudConnect(c){
+ if(!window.mqtt)await loadScript('https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js');
+ mqBase='cultivo/'+c.id.trim().toLowerCase();
+ const url=/^wss?:\/\//.test(c.host)?c.host:`wss://${c.host.trim()}:8884/mqtt`;
+ return new Promise((ok,fail)=>{
+  mq=mqtt.connect(url,{username:c.user,password:c.pass,clientId:'panel-'+Math.random().toString(16).slice(2,10),reconnectPeriod:4000,connectTimeout:10000});
+  let first=true;
+  mq.on('connect',()=>{mq.subscribe([mqBase+'/res',mqBase+'/online']);if(first){first=false;ok()}cloudBadge()});
+  mq.on('error',e=>{if(first){first=false;mq.end(true);fail(new Error(/auth|Not authorized|5/.test(e.message)?'Usuario o contraseña incorrectos':'No se pudo conectar al servidor'))}});
+  mq.on('close',cloudBadge);
+  mq.on('message',(t,m)=>{const txt=m.toString();if(t.endsWith('/online')){mqOnline=txt=='1';cloudBadge();return}
+   let r;try{r=JSON.parse(txt)}catch(e){return}const p=pending[r.id];if(!p)return;delete pending[r.id];clearTimeout(p.t);
+   r.c>=400?p.fail(new Error((r.d&&r.d.error)||'Error '+r.c)):p.ok(r.d)});
+ })}
+function cloudApi(path,body){return new Promise((ok,fail)=>{
+ if(!mq||!mq.connected)return fail(new Error('Sin conexión a la nube'));
+ const [p,qs]=path.split('?'),q=qs?(new URLSearchParams(qs).get('range')||''):'';
+ const id=Math.random().toString(36).slice(2,10);
+ pending[id]={ok,fail,t:setTimeout(()=>{delete pending[id];fail(new Error('El equipo no responde: ¿está prendido y con internet?'))},12000)};
+ mq.publish(mqBase+'/req',JSON.stringify(body===undefined?{id,m:'GET',p,q}:{id,m:'POST',p,q,b:body}))})}
+function cloudBadge(){const b=$('cloudBadge');if(!b)return;const up=mq&&mq.connected;
+ b.textContent=!up?'☁️ reconectando…':mqOnline===false?'☁️ equipo sin conexión':'☁️ en la nube';b.className='badge cloud-only '+(up&&mqOnline!==false?'ok':'bad')}
+function cloudLogout(){try{localStorage.removeItem('cultivoCloud')}catch(e){}location.reload()}
+function showLogin(err){const c=cloudCreds()||{};const d=document.createElement('div');d.id='login';
+ d.innerHTML=`<div class="card"><h2>🌱 Cultivo en la nube</h2><div class="mut">Poné los datos de tu cluster de HiveMQ y el ID que aparece en Ajustes > Nube de la página del equipo.</div>
+ <div class="row"><label>Servidor<input id="lgHost" placeholder="abc123.s1.eu.hivemq.cloud" value="${esc(c.host||'')}"></label></div>
+ <div class="row"><label>Usuario<input id="lgUser" value="${esc(c.user||'')}" autocomplete="username"></label><label>Contraseña<input id="lgPass" type="password" autocomplete="current-password"></label></div>
+ <div class="row"><label>ID del equipo<input id="lgId" placeholder="3fa2" value="${esc(c.id||'')}"></label></div>
+ <div class="actions"><button class="btn" id="lgBtn">Entrar</button><span class="mut bad" id="lgErr">${esc(err||'')}</span></div>
+ <div class="mut" style="margin-top:10px">Los datos quedan guardados solo en este navegador.</div></div>`;
+ document.body.appendChild(d);
+ $('lgBtn').onclick=async()=>{const c={host:$('lgHost').value.trim(),user:$('lgUser').value.trim(),pass:$('lgPass').value,id:$('lgId').value.trim()};
+  if(!c.host||!c.user||!c.pass||!c.id)return $('lgErr').textContent='Completá todos los campos';
+  $('lgErr').textContent='Conectando…';try{await cloudConnect(c);try{localStorage.setItem('cultivoCloud',JSON.stringify(c))}catch(e){}d.remove();start()}catch(e){$('lgErr').textContent=e.message}}}
+const api=window.MOCK_API||(CLOUD?cloudApi:realApi);
+function toast(m,bad){const t=$('toast');t.textContent=m;t.style.color=bad?'var(--err)':'';t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),2500)}
+async function call(p,b,ok){try{const r=await api(p,b);if(ok)toast(ok);return r}catch(e){toast(e.message,true);throw e}}
+
+// ---------- navegación ----------
+function toggleMenu(f){menuOpen=f===undefined?!menuOpen:f;$('menu').classList.toggle('open',menuOpen);$('menuBtn').textContent=menuOpen?'✕':'☰'}
+function show(){const id=(location.hash||'#inicio').slice(1);const sec=SECTIONS.find(s=>s[0]==id)||SECTIONS[0];
+ SECTIONS.forEach(([k])=>$(k).classList.toggle('show',k==sec[0]));
+ $('menu').innerHTML=SECTIONS.map(([k,i,l])=>`<a href="#${k}" class="${k==sec[0]?'sel':''}">${i} ${l}</a>`).join('');
+ $('secName').textContent=sec[0]=='inicio'?'':'· '+sec[2];toggleMenu(false);window.scrollTo(0,0);renderAll()}
+window.addEventListener('hashchange',show);
+
+// ---------- utilidades ----------
+const hhmm=m=>String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+const toMin=s=>{const[a,b]=s.split(':').map(Number);return a*60+b};
+const dur=s=>s>=3600?Math.floor(s/3600)+' h '+Math.round(s%3600/60)+' min':s>=60?Math.round(s/60)+' min':s+' s';
+const hrs=m=>(m/60).toString().replace('.',',');
+const svp=t=>0.61078*Math.exp(17.27*t/(t+237.3));
+const vpd=(t,h)=>Math.max(0,svp(t+(C?C.leafOffset:-2))-svp(t)*h/100);
+const idx=type=>S?S.relays.map((r,i)=>[r,i]).filter(([r])=>type.includes(r.type)):[];
+function seg(i,mode){return `<div class="seg">${MODES.map(([m,l])=>`<button class="${mode==m?'sel':''}" onclick="setMode(${i},'${m}')">${l}</button>`).join('')}</div>`}
+function relayLine(r,i,extra=''){return `<div class="relay"><div><span class="dot ${r.on?'on':''}"></span><b>${esc(r.name)}</b> <span class="mut">${TYPES[r.type]}</span><div class="mut" style="margin-left:19px">${r.mode=='auto'?esc(r.reason||''):r.mode=='on'?'manual: encendido':'manual: apagado'}${r.pulse?' · encendido por '+dur(r.pulse):''}${extra}</div></div>${seg(i,r.mode)}</div>`}
+function relaysArr(i,obj){const a=[];for(let k=0;k<=i;k++)a.push(k==i?obj:{});return a}
+function targets(){return S&&C?(S.time.day?C.climate.day:C.climate.night):null}
+
+// ---------- render ----------
+function renderAll(){if(!S||!C)return;renderHome();renderLights();renderClimate();renderIrrig();renderSettings()}
+function renderHome(){
+ const c=S.climate,t=targets();
+ const cls=(v,lo,hi)=>v<lo||v>hi?'warn':'ok';
+ $('t').innerHTML=c.valid?`<span class="${cls(c.temperature,t.tMin,t.tMax)}">${c.temperature}°</span>`:'--';
+ $('h').innerHTML=c.valid?`<span class="${cls(c.humidity,t.hMin,t.hMax)}">${c.humidity}%</span>`:'--';
+ const vlo=vpd(t.tMin,t.hMax),vhi=vpd(t.tMax,t.hMin);
+ $('v').innerHTML=c.valid?`<span class="${cls(c.vpd,vlo-.05,vhi+.05)}">${c.vpd}</span> <span class="mut">kPa</span>`:'--';
+ $('tT').textContent=`objetivo ${t.tMin}-${t.tMax} °C`;$('hT').textContent=`objetivo ${t.hMin}-${t.hMax} %`;$('vT').textContent=`objetivo ${vlo.toFixed(1)}-${vhi.toFixed(1)}`;
+ $('dayLbl').textContent=S.time.day?'☀️ Día':'🌙 Noche';
+ $('clk').textContent=S.time.valid?S.time.local.slice(11,16):'sin hora';$('clkS').textContent=S.time.valid?S.time.local.slice(0,10):'';
+ $('hdrTime').textContent=S.time.valid?S.time.local.slice(11,16):'';
+ $('sens').innerHTML=c.valid?`Sensor ${c.sensor} · punto de rocío ${c.dewPoint} °C`:`<span class="bad">Sin lectura del sensor (${c.sensor})</span>`;
+ $('relays').innerHTML=S.relays.map((r,i)=>relayLine(r,i)).join('');
+ // resumen por sección
+ const L=idx(['light']),F=idx(['fan_in','fan_out']),I=idx(['irrigation']);
+ const lt=L.length?L.map(([r,i])=>{const l=C.relays[i].light;return `${esc(r.name)}: ${hrs(l.on)}/${hrs(l.off)} · ${r.on?'prendida':'apagada'}${r.next&&r.mode=='auto'?' · cambia en '+dur(r.next):''}`}).join('<br>'):'Sin luces asignadas';
+ const ft=F.length?F.map(([r])=>`${esc(r.name)}: ${r.on?'prendido':'apagado'}`).join(' · '):'Sin ventilación asignada';
+ let nx=null;I.forEach(([r,i])=>C.relays[i].events.filter(e=>e.en).forEach(e=>{const now=S.time.valid?toMin(S.time.local.slice(11,16)):0;const d=(toMin(e.start)-now+1440)%1440;if(nx===null||d<nx.d)nx={d,s:e.start,n:r.name}}));
+ const it=I.length?(nx?`Próximo: ${nx.s} (${esc(nx.n)})`:'Sin riegos programados'):'Sin riego asignado';
+ $('summary').innerHTML=[['luz','💡 Iluminación',lt],['clima','🌡️ Clima',ft],['riego','💧 Riego',it]].map(([k,h,b])=>`<a href="#${k}" class="card"><h3>${h} ›</h3><div class="mut" style="margin-top:6px">${b}</div></a>`).join('');
+ drawChart();
+}
+
+function renderLights(){
+ const L=idx(['light']);if(dirty.has('luz'))return refreshStates('L',lightStatus);
+ $('lights').innerHTML=L.length?L.map(([r,i])=>{const l=C.relays[i].light;const pre=LIGHT_PRESETS.find(([a,b])=>a*60==l.on&&b*60==l.off);
+  return `<div class="card" id="L${i}"><div class="rhead"><h3><span class="dot ${r.on?'on':''}"></span>${esc(r.name)}</h3>${seg(i,r.mode)}</div>
+  <div class="mut" data-st>${lightStatus(r)}</div>
+  <div class="chips">${LIGHT_PRESETS.map(([a,b])=>`<button class="chip ${pre&&pre[0]==a?'sel':''}" onclick="lightPreset(${i},${a},${b})">${a}/${b}</button>`).join('')}<button class="chip ${pre?'':'sel'}" onclick="lightPreset(${i})">Personalizado</button></div>
+  <div class="row"><label>Enciende a las<input type="time" id="ls${i}" value="${l.start}" oninput="lightSum(${i})"></label>
+  <label>Horas encendida<input type="number" step="0.25" min="0.25" id="lon${i}" value="${l.on/60}" ${pre?'disabled':''} oninput="lightSum(${i})"></label>
+  <label>Horas apagada<input type="number" step="0.25" min="0" id="loff${i}" value="${l.off/60}" ${pre?'disabled':''} oninput="lightSum(${i})"></label></div>
+  <div class="mut" id="lsum${i}"></div><div class="actions"><button class="btn" onclick="saveLight(${i})">Guardar horario</button></div></div>`}).join('')
+  :'<div class="card empty">No hay relés asignados a luz. Asignalos en Ajustes.</div>';
+ L.forEach(([,i])=>lightSum(i));
+}
+function lightStatus(r){return r.mode=='auto'?esc(r.reason)+(r.next?' · cambia en '+dur(r.next):''):'Modo manual. Pasalo a Auto para que siga el horario.'}
+function lightPreset(i,a,b){const on=$('lon'+i),off=$('loff'+i);if(a){on.value=a;off.value=b}on.disabled=off.disabled=!!a;
+ $('L'+i).querySelectorAll('.chip').forEach(c=>c.classList.toggle('sel',a?c.textContent==a+'/'+b:c.textContent=='Personalizado'));lightSum(i)}
+function lightSum(i){const on=Math.round(+$('lon'+i).value*60),off=Math.round(+$('loff'+i).value*60),st=toMin($('ls'+i).value||'00:00');
+ $('lsum'+i).textContent=on+off==1440?`Prende ${hhmm(st)} y apaga ${hhmm(st+on)} todos los días.`:`Ciclo de ${hrs(on+off)} h: ${hrs(on)} h prendida y ${hrs(off)} h apagada, arrancando hoy ${hhmm(st)}. El horario se va corriendo cada día.`}
+async function saveLight(i){const on=Math.round(+$('lon'+i).value*60),off=Math.round(+$('loff'+i).value*60);
+ C=await call('/api/config',{relays:relaysArr(i,{light:{on,off,start:$('ls'+i).value}})},'Horario guardado');dirty.delete('luz');await refresh()}
+
+function rangeInputs(k,t){return `<div><b>${k=='day'?'☀️ Día (luces prendidas)':'🌙 Noche'}</b><div class="row">
+ <label>Temp. mín (°C)<input type="number" step="0.5" id="${k}tMin" value="${t.tMin}" oninput="vpdHint()"></label><label>Temp. máx (°C)<input type="number" step="0.5" id="${k}tMax" value="${t.tMax}" oninput="vpdHint()"></label>
+ <label>Hum. mín (%)<input type="number" id="${k}hMin" value="${t.hMin}" oninput="vpdHint()"></label><label>Hum. máx (%)<input type="number" id="${k}hMax" value="${t.hMax}" oninput="vpdHint()"></label></div><div class="mut" id="${k}Vpd"></div></div>`}
+function renderClimate(){
+ const cl=C.climate;
+ $('stages').innerHTML=Object.keys(STAGES).map(s=>`<button class="chip" onclick="setStage('${s}')">${s}</button>`).join('');
+ if(!dirty.has('clima')){
+  $('targets').innerHTML=rangeInputs('day',cl.day)+'<div style="height:10px"></div>'+rangeInputs('night',cl.night);
+  $('tHyst').value=cl.tempHyst;$('hHyst').value=cl.humHyst;$('ventOn').value=cl.ventOn;$('ventEvery').value=cl.ventEvery;vpdHint()}
+ const F=idx(['fan_out','fan_in']);
+ $('fans').innerHTML=F.length?F.map(([r,i])=>relayLine(r,i)).join(''):'<div class="empty">No hay extractor/intractor asignado.</div>';
+ const A=idx(AUX);
+ $('aux').innerHTML=A.length?A.map(([r,i])=>`${relayLine(r,i)}<div style="margin:0 0 8px 19px" data-nodirty><select onchange="setAux(${i},this.value)">${AUX.map(k=>`<option value="${k}" ${k==r.type?'selected':''}>${TYPES[k]}</option>`).join('')}</select></div>`).join(''):'<div class="empty">No hay salidas libres.</div>';
+}
+function readT(k){const g=n=>parseFloat($(k+n).value);return {tMin:g('tMin'),tMax:g('tMax'),hMin:g('hMin'),hMax:g('hMax')}}
+function vpdHint(){['day','night'].forEach(k=>{const t=readT(k);$(k+'Vpd').textContent=`VPD resultante: ${vpd(t.tMin,t.hMax).toFixed(2)} a ${vpd(t.tMax,t.hMin).toFixed(2)} kPa`})}
+function setStage(s){const st=STAGES[s];['day','night'].forEach(k=>Object.entries(st[k]).forEach(([n,v])=>$(k+n).value=v));vpdHint();
+ document.querySelectorAll('#stages .chip').forEach(c=>c.classList.toggle('sel',c.textContent==s));toast('Rangos de '+s+' cargados, falta guardar')}
+async function saveClimate(){C=await call('/api/config',{climate:{day:readT('day'),night:readT('night'),tempHyst:+$('tHyst').value,humHyst:+$('hHyst').value,ventOn:+$('ventOn').value,ventEvery:+$('ventEvery').value}},'Clima guardado');dirty.delete('clima');await refresh()}
+async function setAux(i,type){C=await call('/api/config',{relays:relaysArr(i,{type})},'Salida asignada como '+TYPES[type]);await refresh()}
+
+function renderIrrig(){
+ const I=idx(['irrigation']);if(dirty.has('riego'))return refreshStates('I',irrigStatus);
+ $('irrig').innerHTML=I.length?I.map(([r,i])=>{const ev=C.relays[i].events;
+  return `<div class="card" id="I${i}"><div class="rhead"><h3><span class="dot ${r.on?'on':''}"></span>${esc(r.name)}</h3>${seg(i,r.mode)}</div>
+  <div class="mut" data-st>${irrigStatus(r)}</div>
+  <table style="margin-top:8px"><thead><tr><th>Hora</th><th>Duración (s)</th><th>Activo</th><th></th></tr></thead><tbody id="ev${i}">${ev.map(e=>evRow(e)).join('')}</tbody></table>
+  <div class="actions"><button class="btn sec sm" data-dirty onclick="addEv(${i})">+ Agregar riego</button><span class="mut">Total por día: <span id="tot${i}"></span></span></div>
+  <details style="margin-top:10px"><summary class="mut" style="cursor:pointer">🪄 Asistente: repartir riegos en el horario de luz</summary>
+  <div class="row"><label>Riegos por día<input type="number" id="an${i}" value="3" min="1" max="8"></label><label>Duración c/u (s)<input type="number" id="ad${i}" value="60" min="1"></label>
+  <label>Primero (h después de prender)<input type="number" step="0.5" id="aa${i}" value="1"></label><label>Último (h antes de apagar)<input type="number" step="0.5" id="ab${i}" value="3"></label></div>
+  <button class="btn sec sm" data-dirty onclick="assist(${i})">Generar</button> <span class="mut">Reemplaza la tabla; revisá y guardá.</span></details>
+  <div class="actions" style="border-top:1px solid var(--line);padding-top:10px"><button class="btn" onclick="saveIrrig(${i})">Guardar riegos</button>
+  <span style="flex:1"></span><span data-nodirty style="display:contents"><input type="number" id="pn${i}" value="30" min="1" max="3600" style="width:80px"></span><span class="mut">s</span><button class="btn sec" onclick="pulse(${i})">Regar ahora</button>${r.pulse?`<button class="btn sec" onclick="pulse(${i},0)">Cortar</button>`:''}</div></div>`}).join('')
+  :'<div class="card empty">No hay relés asignados a riego. Asignalos en Ajustes.</div>';
+ I.forEach(([,i])=>evTotal(i));
+}
+function irrigStatus(r){return (r.mode=='auto'?esc(r.reason):'Modo manual. Pasalo a Auto para que riegue según la tabla.')+(r.pulse?' · regando, faltan '+dur(r.pulse):'')}
+function evRow(e){return `<tr><td><input type="time" value="${e.start}" data-k="start"></td><td><input type="number" min="1" max="3600" value="${e.dur}" data-k="dur" oninput="evTotal()"></td><td><input type="checkbox" ${e.en?'checked':''} data-k="en" onchange="evTotal()"></td><td><button class="btn sec sm" data-dirty onclick="this.closest('tr').remove();evTotal()">✕</button></td></tr>`}
+function readEv(i){return [...$('ev'+i).querySelectorAll('tr')].map(tr=>{const q=k=>tr.querySelector(`[data-k=${k}]`);return {start:q('start').value,dur:+q('dur').value,en:q('en').checked}})}
+function evTotal(i){if(i===undefined)return idx(['irrigation']).forEach(([,k])=>evTotal(k));const ev=readEv(i).filter(e=>e.en);$('tot'+i).textContent=ev.length+' riegos · '+dur(ev.reduce((a,e)=>a+e.dur,0))}
+function addEv(i){if($('ev'+i).children.length>=8)return toast('Máximo 8 riegos',true);$('ev'+i).insertAdjacentHTML('beforeend',evRow({start:'12:00',dur:60,en:true}));evTotal(i)}
+function assist(i){const L=idx(['light']);let st=6*60,on=18*60;if(L.length){const l=C.relays[L[0][1]].light;st=toMin(l.start);on=l.on}
+ const n=Math.max(1,Math.min(8,+$('an'+i).value)),d=+$('ad'+i).value,a=st+$('aa'+i).value*60,b=st+on-$('ab'+i).value*60;
+ if(b<a)return toast('No entra en el horario de luz',true);
+ const ev=[...Array(n).keys()].map(k=>({start:hhmm(Math.round(n==1?a:a+(b-a)*k/(n-1))),dur:d,en:true}));
+ $('ev'+i).innerHTML=ev.map(evRow).join('');evTotal(i);toast('Generado, falta guardar')}
+async function saveIrrig(i){C=await call('/api/config',{relays:relaysArr(i,{events:readEv(i)})},'Riegos guardados');dirty.delete('riego');await refresh()}
+async function pulse(i,s){S=await call('/api/relay',{id:i,pulse:s===undefined?+$('pn'+i).value:s},s===0?'Riego cortado':'Regando');renderAll()}
+
+// Mientras se edita un formulario solo se actualizan los estados, sin pisar lo que se está escribiendo.
+function refreshStates(p,status){S.relays.forEach((r,i)=>{const c=$(p+i);if(!c)return;c.querySelector('.dot').classList.toggle('on',r.on);c.querySelector('[data-st]').innerHTML=status(r);c.querySelector('.seg').outerHTML=seg(i,r.mode)})}
+
+function renderSettings(){
+ const w=S.wifi;$('wst').textContent=w.connected?`Conectado a ${w.ssid} · IP ${w.ip} · ${w.rssi} dBm`:(w.ssid?`Sin conexión a ${w.ssid}`:'Sin red configurada')+(w.ap?` · red "${w.apSsid}" activa`:'');
+ if(dirty.has('ajustes'))return;
+ $('mqSt').textContent=C.mqttHost?(S.wifi.cloud?'Conectado':'Sin conectar (revisá los datos)'):'Desactivada';$('devId').textContent=S.device||'--';
+ $('cloudUrl').textContent=CLOUD_PANEL_URL;$('cloudUrl').href=CLOUD_PANEL_URL;
+ $('mqHost').value=C.mqttHost||'';$('mqPort').value=C.mqttPort||8883;$('mqUser').value=C.mqttUser||'';$('mqPass').placeholder=C.mqttPassSet?'guardada (vacío = no cambiar)':'';
+ $('tgSt').textContent=C.telegramTokenSet?'Bot activo':'Bot desactivado';$('pwSt').textContent=C.webPasswordSet?'Con contraseña':'Sin contraseña';
+ $('tgToken').placeholder=C.telegramTokenSet?'guardado (vacío = no cambiar)':'123456789:AA...';$('tgChat').value=C.telegramChat;$('tgAlerts').checked=C.telegramAlerts;
+ $('leaf').value=C.leafOffset;$('alow').value=C.relayActiveLow?1:0;$('appw').value=C.apPassword;$('tz').value=C.tz;
+ $('cfgr').innerHTML=C.relays.map((r,i)=>`<tr><td class="mut">${i+1}</td><td><input id="n${i}" maxlength="23" value="${esc(r.name)}"></td><td><select id="y${i}">${Object.entries(TYPES).map(([k,l])=>`<option value="${k}" ${k==r.type?'selected':''}>${l}</option>`).join('')}</select></td></tr>`).join('');
+}
+async function saveDevice(){const relays=C.relays.map((_,i)=>({name:$('n'+i).value,type:$('y'+i).value}));
+ C=await call('/api/config',{relays,leafOffset:+$('leaf').value,relayActiveLow:$('alow').value=='1',apPassword:$('appw').value,tz:$('tz').value},'Ajustes guardados');dirty.delete('ajustes');await refresh()}
+async function saveCloud(off){const b=off?{mqttHost:''}:{mqttHost:$('mqHost').value.trim(),mqttPort:+$('mqPort').value||8883,mqttUser:$('mqUser').value.trim()};
+ if(!off&&$('mqPass').value)b.mqttPass=$('mqPass').value;
+ C=await call('/api/config',b,off?'Nube desactivada':'Nube guardada, conectando…');$('mqPass').value='';dirty.delete('ajustes');renderSettings()}
+async function saveTelegram(off){const b=off?{telegramToken:''}:{telegramChat:$('tgChat').value.trim(),telegramAlerts:$('tgAlerts').checked};
+ if(!off&&$('tgToken').value.trim())b.telegramToken=$('tgToken').value.trim();
+ C=await call('/api/config',b,off?'Bot desactivado':'Telegram guardado');$('tgToken').value='';dirty.delete('ajustes');renderSettings()}
+async function saveWebPw(off){const pw=off?'':$('webPw').value;if(!off&&pw.length<4)return toast('Usá al menos 4 caracteres',true);
+ C=await call('/api/config',{webPassword:pw},off?'Contraseña quitada':'Contraseña guardada: el navegador te la va a pedir');$('webPw').value='';dirty.delete('ajustes');renderSettings()}
+async function scan(){$('wmsg').textContent='Buscando…';for(let k=0;k<20;k++){const r=await api('/api/wifi/scan');if(r.networks){$('ssid').innerHTML='<option value="">Elegí una red…</option>'+r.networks.sort((a,b)=>b.rssi-a.rssi).map(n=>`<option>${esc(n.ssid)}</option>`).join('');$('wmsg').textContent=r.networks.length+' redes';return}await new Promise(r=>setTimeout(r,1000))}$('wmsg').textContent='No se pudo escanear'}
+async function saveWifi(){const ssid=$('ssidm').value||$('ssid').value;if(!ssid)return;await call('/api/wifi',{ssid,pass:$('pass').value});$('wmsg').textContent='Conectando… después entrá a http://cultivo.local o a la IP que aparezca acá.'}
+async function forget(){if(confirm('¿Borrar la red guardada y reiniciar?'))await call('/api/wifi/forget',{})}
+async function syncTime(){S=await call('/api/time',{epoch:Math.floor(Date.now()/1000)},'Hora actualizada');renderAll()}
+async function restart(){if(confirm('¿Reiniciar el equipo?'))await call('/api/restart',{},'Reiniciando…')}
+async function setMode(i,m){S=await call('/api/relay',{id:i,mode:m});renderAll()}
+
+// ---------- gráfico ----------
+function drawChart(){
+ $('chSel').innerHTML=[['th','Temp/Hum'],['v','VPD']].map(([k,l])=>`<button class="${chartVar==k?'sel':''}" onclick="chartVar='${k}';drawChart()">${l}</button>`).join('');
+ const cv=$('chart'),dpr=window.devicePixelRatio||1,W=cv.clientWidth,Hh=cv.clientHeight;if(!W)return;cv.width=W*dpr;cv.height=Hh*dpr;
+ const g=cv.getContext('2d');g.scale(dpr,dpr);g.clearRect(0,0,W,Hh);
+ const css=getComputedStyle(document.body),col=n=>css.getPropertyValue(n).trim();
+ const series=!H||!H.t.length?[]:chartVar=='th'?[[H.t,col('--warn'),'Temp °C'],[H.h,col('--acc2'),'Hum %']]:[[H.v,col('--acc'),'VPD kPa']];
+ $('legend').innerHTML=series.map(([,c,l])=>`<span><i style="background:${c}"></i>${l}</span>`).join('')+(H&&H.t.length?`<span>${dur(H.t.length*H.interval)} de datos</span>`:'');
+ if(!series.length){g.fillStyle=col('--mut');g.font='13px system-ui';g.fillText('Todavía no hay datos (se guarda un punto cada 5 min)',10,Hh/2);return}
+ const pad=28,n=288;g.strokeStyle=col('--line');g.lineWidth=1;g.fillStyle=col('--mut');g.font='11px system-ui';
+ for(let k=0;k<=4;k++){const y=8+(Hh-pad-8)*k/4;g.beginPath();g.moveTo(pad,y);g.lineTo(W,y);g.stroke()}
+ [24,18,12,6,0].forEach((h,k)=>g.fillText(h?'-'+h+'h':'ahora',pad+(W-pad-30)*k/4,Hh-8));
+ series.forEach(([d,c],si)=>{const lo=Math.min(...d)-1,hi=Math.max(...d)+1;g.strokeStyle=c;g.lineWidth=2;g.beginPath();
+  d.forEach((v,k)=>{const x=pad+(W-pad)*(n-d.length+k)/(n-1),y=8+(Hh-pad-8)*(1-(v-lo)/(hi-lo));k?g.lineTo(x,y):g.moveTo(x,y)});g.stroke();
+  g.fillStyle=c;g.fillText(hi.toFixed(chartVar=='v'?1:0),si?W-26:2,16);g.fillText(lo.toFixed(chartVar=='v'?1:0),si?W-26:2,Hh-pad)});
+}
+window.addEventListener('resize',drawChart);
+
+// ---------- historial ----------
+let HR='day',HD=null;
+const RANGES=[['day','Día'],['week','Semana'],['month','Mes']];
+const pad2=n=>String(n).padStart(2,'0');
+const WD=['dom','lun','mar','mié','jue','vie','sáb'];
+const fmtDay=ms=>{const d=new Date(ms);return WD[d.getDay()]+' '+d.getDate()+'/'+(d.getMonth()+1)};
+async function loadRange(r){if(r)HR=r;$('rangeSel').innerHTML=RANGES.map(([k,l])=>`<button class="${HR==k?'sel':''}" onclick="loadRange('${k}')">${l}</button>`).join('');
+ try{HD=await api('/api/history?range='+HR);renderHist()}catch(e){}}
+// Agrupa registros por hora en días (hora local).
+function hoursToDays(d){const out=[];d.ts.forEach((ts,k)=>{const dt=new Date(ts*1000);dt.setHours(0,0,0,0);let x=out[out.length-1];
+ if(!x||x.ts!=dt/1000){x={ts:dt/1000,ts_:[],t:[],tn:[],tx:[],h:[],hn:[],hx:[],v:[],light:0,fan:0,irr:0};out.push(x)}
+ ['t','tn','tx','h','hn','hx','v'].forEach(f=>{if(d[f][k]!=null)x[f].push(d[f][k])});x.light+=d.light[k];x.fan+=d.fan[k];x.irr+=d.irr[k]});
+ const avg=a=>a.length?a.reduce((p,c)=>p+c,0)/a.length:null;
+ return out.map(x=>({ts:x.ts,t:avg(x.t),tn:x.tn.length?Math.min(...x.tn):null,tx:x.tx.length?Math.max(...x.tx):null,h:avg(x.h),hn:x.hn.length?Math.min(...x.hn):null,hx:x.hx.length?Math.max(...x.hx):null,v:avg(x.v),light:x.light,fan:x.fan,irr:x.irr}))}
+function renderHist(){if(!HD)return;
+ let xs=[],ser={},days=[],xfmt;
+ if(HR=='day'){const n=HD.t.length,now=Date.now()-HD.age*1000;xs=HD.t.map((_,k)=>now-(n-1-k)*HD.interval*1000);ser={t:HD.t,h:HD.h,v:HD.v};days=(HD.today&&HD.today.days)||[];xfmt=ms=>{const d=new Date(ms);return pad2(d.getHours())+':'+pad2(d.getMinutes())}}
+ else if(HR=='week'){xs=HD.ts.map(t=>t*1000);ser=HD;days=hoursToDays(HD);xfmt=fmtDay}
+ else{days=HD.days;xs=days.map(d=>d.ts*1000);ser={};['t','tn','tx','h','hn','hx','v'].forEach(f=>ser[f]=days.map(d=>d[f]==null?null:+d[f]));xfmt=ms=>{const d=new Date(ms);return d.getDate()+'/'+(d.getMonth()+1)}}
+ const css=getComputedStyle(document.body),col=n=>css.getPropertyValue(n).trim();
+ lineChart($('hcT'),xs,ser.t,ser.tn,ser.tx,col('--warn'),1,xfmt);lineChart($('hcH'),xs,ser.h,ser.hn,ser.hx,col('--acc2'),0,xfmt);lineChart($('hcV'),xs,ser.v,null,null,col('--acc'),2,xfmt);
+ $('hlT').innerHTML=HR=='day'?'':`<span><i style="background:${col('--warn')}"></i>promedio</span><span><i style="background:${col('--warn')};opacity:.3;height:8px"></i>mínimo a máximo</span>`;
+ // resumen
+ const num=a=>a.filter(v=>v!=null).map(Number),avg=a=>{a=num(a);return a.length?a.reduce((p,c)=>p+c,0)/a.length:null},mn=a=>{a=num(a);return a.length?Math.min(...a):null},mx=a=>{a=num(a);return a.length?Math.max(...a):null};
+ const f=(v,d)=>v==null?'--':v.toFixed(d),nd=Math.max(1,days.length);
+ const st=HR=='day'?{t:avg(ser.t),tn:mn(ser.t),tx:mx(ser.t),h:avg(ser.h),hn:mn(ser.h),hx:mx(ser.h),v:avg(ser.v)}:{t:avg(ser.t),tn:mn(ser.tn||ser.t),tx:mx(ser.tx||ser.t),h:avg(ser.h),hn:mn(ser.hn||ser.h),hx:mx(ser.hx||ser.h),v:avg(ser.v)};
+ const tot=k=>days.reduce((p,d)=>p+(+d[k]||0),0);
+ const per=HR=='day'?'hoy':'por día';
+ $('hStats').innerHTML=[['Temperatura',f(st.t,1)+' °C',`mín ${f(st.tn,1)} · máx ${f(st.tx,1)}`],['Humedad',f(st.h,0)+' %',`mín ${f(st.hn,0)} · máx ${f(st.hx,0)}`],['VPD',f(st.v,2)+' kPa','promedio'],
+  ['Luz '+per,(tot('light')/60/nd).toFixed(1)+' h',''],['Coolers '+per,(tot('fan')/60/nd).toFixed(1)+' h',''],['Riego '+per,dur(Math.round(tot('irr')/nd)),'tiempo de bomba']]
+  .map(([l,v,s])=>`<div class="tile"><div class="mut">${l}</div><div class="big" style="font-size:1.35rem">${v}</div><div class="mut">${s}</div></div>`).join('');
+ $('hTable').innerHTML=days.length?'<tr><th>Día</th><th>Temp °C</th><th>Hum %</th><th>VPD</th><th>Luz</th><th>Coolers</th><th>Riego</th></tr>'+days.slice().reverse().map(d=>`<tr><td>${fmtDay(d.ts*1000)}</td><td>${f(d.t==null?null:+d.t,1)} <span class="mut">${f(d.tn==null?null:+d.tn,0)}-${f(d.tx==null?null:+d.tx,0)}</span></td><td>${f(d.h==null?null:+d.h,0)} <span class="mut">${f(d.hn==null?null:+d.hn,0)}-${f(d.hx==null?null:+d.hx,0)}</span></td><td>${f(d.v==null?null:+d.v,2)}</td><td>${(d.light/60).toFixed(1)} h</td><td>${(d.fan/60).toFixed(1)} h</td><td>${dur(d.irr)}</td></tr>`).join(''):'<tr><td class="empty">Todavía no hay días guardados.</td></tr>';
+}
+function lineChart(cv,xs,y,lo,hi,color,dec,xfmt){
+ const dpr=window.devicePixelRatio||1,W=cv.clientWidth,Hh=cv.clientHeight;if(!W)return;cv.width=W*dpr;cv.height=Hh*dpr;
+ const g=cv.getContext('2d');g.scale(dpr,dpr);const css=getComputedStyle(document.body),col=n=>css.getPropertyValue(n).trim();
+ g.font='11px system-ui';g.fillStyle=col('--mut');
+ const vals=[...(y||[]),...(lo||[]),...(hi||[])].filter(v=>v!=null);
+ if(!vals.length||xs.length<2){g.fillText('Todavía no hay datos para este período',10,Hh/2);return}
+ let a=Math.min(...vals),b=Math.max(...vals);const m=(b-a)*.1||1;a-=m;b+=m;
+ const L=34,T=8,B=22,x0=xs[0],x1=xs[xs.length-1],X=t=>L+(W-L-8)*(t-x0)/(x1-x0||1),Y=v=>T+(Hh-T-B)*(1-(v-a)/(b-a));
+ g.strokeStyle=col('--line');g.lineWidth=1;for(let k=0;k<=3;k++){const v=a+(b-a)*k/3,yy=Y(v);g.beginPath();g.moveTo(L,yy);g.lineTo(W-8,yy);g.stroke();g.fillText(v.toFixed(dec>1?1:0),2,yy+4)}
+ for(let k=0;k<=4;k++){const t=x0+(x1-x0)*k/4,lbl=xfmt(t),w=g.measureText(lbl).width;g.fillText(lbl,Math.min(W-w-2,Math.max(L,X(t)-w/2)),Hh-6)}
+ if(lo&&hi){g.fillStyle=color;g.globalAlpha=.22;let open=false;const seg=[];
+  xs.forEach((t,k)=>{if(lo[k]==null||hi[k]==null){flush();return}seg.push(k)});flush();
+  function flush(){if(seg.length){g.beginPath();seg.forEach((k,j)=>{j?g.lineTo(X(xs[k]),Y(hi[k])):g.moveTo(X(xs[k]),Y(hi[k]))});seg.slice().reverse().forEach(k=>g.lineTo(X(xs[k]),Y(lo[k])));g.closePath();g.fill();seg.length=0}}
+  g.globalAlpha=1}
+ g.strokeStyle=color;g.lineWidth=2;g.beginPath();let pen=false;y.forEach((v,k)=>{if(v==null){pen=false;return}const px=X(xs[k]),py=Y(v);pen?g.lineTo(px,py):g.moveTo(px,py);pen=true});g.stroke();
+ const k=y.length-1;if(y[k]!=null){g.fillStyle=color;g.beginPath();g.arc(X(xs[k]),Y(y[k]),3.5,0,7);g.fill()}
+}
+window.addEventListener('resize',()=>{if(location.hash=='#historial')renderHist()});
+window.addEventListener('hashchange',()=>{if(location.hash=='#historial')loadRange()});
+
+// ---------- ciclo ----------
+async function refresh(){try{S=await api('/api/status');if(!C)C=await api('/api/config');renderAll()}catch(e){}}
+async function loadHistory(){try{H=await api('/api/history');drawChart()}catch(e){}}
+function start(){show();refresh();loadHistory();if(location.hash=='#historial')loadRange();setInterval(refresh,CLOUD?5000:3000);setInterval(loadHistory,CLOUD?300000:60000)}
+if(CLOUD){document.body.classList.add('cloud');const c=cloudCreds();if(c)cloudConnect(c).then(start,e=>showLogin(e.message));else showLogin()}else start();
+</script></body></html>
