@@ -40,7 +40,8 @@ La configuración (nombres, tipos y modo de cada relé, offset de hoja para el V
 ## Acceso desde cualquier lado
 
 - **Telegram (recomendado):** en Ajustes > Telegram cargás el token de un bot creado con @BotFather y tu chat id. Desde cualquier lado: `/estado`, `/luces on|off|auto`, `/rele N on|off|auto`, `/regar N SEG`. Avisa si la temperatura o la humedad se van de rango más de 10 min, si falla el sensor o si el equipo se reinició (corte de luz). No hace falta tocar el router.
-- **Panel web completo:** con una VPN hacia tu casa. Lo más simple es [Tailscale](https://tailscale.com) en una compu o Raspberry que quede prendida en tu casa, configurada como *subnet router*, y la app de Tailscale en el celular: entrás a la IP del equipo como si estuvieras en tu WiFi. Si tu router trae VPN (WireGuard/OpenVPN) sirve igual.
+- **Panel en la nube (sin comprar nada):** el equipo se conecta por MQTT seguro a un broker gratis ([HiveMQ Cloud](https://console.hivemq.cloud), plan Serverless) y el mismo panel, publicado en una web, habla con él por ahí. En Ajustes > Nube cargás la URL del cluster, usuario y contraseña; después abrís el panel en la nube y entrás con esos datos y el ID del equipo. Desde la nube no se puede cambiar el WiFi ni la conexión a la nube (para no dejar el equipo inaccesible).
+- **Panel web completo por VPN:** con una VPN hacia tu casa. Lo más simple es [Tailscale](https://tailscale.com) en una compu o Raspberry que quede prendida en tu casa, configurada como *subnet router*, y la app de Tailscale en el celular: entrás a la IP del equipo como si estuvieras en tu WiFi. Si tu router trae VPN (WireGuard/OpenVPN) sirve igual.
 - No conviene abrir un puerto del router hacia el ESP32: la página va sin cifrar. Si igual lo hacés, poné contraseña en Ajustes.
 
 ## API

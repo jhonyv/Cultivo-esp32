@@ -50,8 +50,11 @@ canvas{width:100%;height:190px;display:block}
 .empty{color:var(--mut);font-style:italic}
 .nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
 .nav a{display:block;text-decoration:none;color:var(--fg)}
+#login{position:fixed;inset:0;z-index:20;background:var(--bg);overflow:auto;padding:24px 16px}#login .card{max-width:440px;margin:24px auto}
+.badge{font-size:.75rem;padding:3px 8px;border-radius:12px;background:var(--card2);border:1px solid var(--line)}.badge.ok{color:var(--acc)}.badge.bad{color:var(--err)}
+.cloud-only{display:none}body.cloud .cloud-only{display:revert}body.cloud .local-only{display:none}
 </style></head><body>
-<header><div class="hbar"><h1>🌱 Cultivo <span class="mut" id="secName"></span></h1><span class="mut" id="hdrTime"></span><button id="menuBtn" onclick="toggleMenu()">☰</button></div>
+<header><div class="hbar"><h1>🌱 Cultivo <span class="mut" id="secName"></span></h1><span class="badge cloud-only" id="cloudBadge"></span><span class="mut" id="hdrTime"></span><button id="menuBtn" onclick="toggleMenu()">☰</button></div>
 <nav id="menu"></nav></header>
 <main>
 
@@ -105,7 +108,9 @@ canvas{width:100%;height:190px;display:block}
 </section>
 
 <section id="ajustes"><h2>⚙️ Ajustes</h2>
-<div class="card" data-nodirty><h3>WiFi</h3><div id="wst" class="mut" style="margin:6px 0"></div>
+<div class="card cloud-only" data-nodirty><h3>Panel en la nube</h3><div class="mut" style="margin:6px 0">Estás manejando el equipo por internet. El WiFi y la conexión a la nube solo se cambian desde tu red local.</div>
+<div class="actions"><button class="btn sec" onclick="cloudLogout()">Cerrar sesión en este dispositivo</button></div></div>
+<div class="card local-only" data-nodirty><h3>WiFi</h3><div id="wst" class="mut" style="margin:6px 0"></div>
 <div class="row"><select id="ssid"><option value="">Elegí una red…</option></select><button class="btn sec" onclick="scan()">Buscar redes</button></div>
 <div class="row"><input id="ssidm" placeholder="o escribí el nombre de la red"><input id="pass" type="password" placeholder="Clave"></div>
 <div class="actions"><button class="btn" onclick="saveWifi()">Conectar</button><button class="btn sec" onclick="forget()">Olvidar red</button><span class="mut" id="wmsg"></span></div></div>
@@ -115,6 +120,16 @@ canvas{width:100%;height:190px;display:block}
 <label>Módulo de relés<select id="alow"><option value="1">Activo en bajo (común)</option><option value="0">Activo en alto</option></select></label></div>
 <div class="row"><label>Clave de la red Cultivo (vacía = abierta)<input id="appw"></label><label>Zona horaria (POSIX)<input id="tz"></label></div>
 <div class="actions"><button class="btn" onclick="saveDevice()">Guardar</button><button class="btn sec" onclick="syncTime()">Usar hora del celular</button><button class="btn sec" onclick="restart()">Reiniciar</button></div></div>
+<div class="card local-only"><h3>Nube: el panel desde cualquier lado</h3>
+<details class="tip" style="margin:8px 0"><summary>Cómo configurarlo (5 minutos, gratis)</summary><ol style="margin:8px 0;padding-left:20px;line-height:1.5">
+<li>Creá una cuenta en <b>console.hivemq.cloud</b> y un cluster <b>Serverless</b> (gratis).</li>
+<li>En el cluster, entrá a <b>Access Management</b> y creá un usuario y una contraseña.</li>
+<li>Copiá la <b>URL del cluster</b> (algo como <code>abc123.s1.eu.hivemq.cloud</code>) y cargala acá con el usuario y la contraseña. Guardá.</li>
+<li>Cuando diga <b>Conectado</b>, abrí el <b>panel en la nube</b> desde el celular y poné los mismos datos y el <b>ID del equipo</b>.</li></ol></details>
+<div class="row"><label>Servidor (URL del cluster)<input id="mqHost" placeholder="abc123.s1.eu.hivemq.cloud" autocomplete="off"></label><label>Puerto<input id="mqPort" type="number" value="8883"></label></div>
+<div class="row"><label>Usuario<input id="mqUser" autocomplete="off"></label><label>Contraseña<input id="mqPass" type="password" autocomplete="off"></label></div>
+<div class="actions"><button class="btn" onclick="saveCloud()">Guardar</button><button class="btn sec" onclick="saveCloud(true)">Desactivar</button><span class="mut" id="mqSt"></span></div>
+<div class="mut" style="margin-top:8px">ID del equipo: <b id="devId">--</b> · Panel en la nube: <a id="cloudUrl" style="color:var(--acc2)" target="_blank" rel="noopener"></a></div></div>
 <div class="card"><h3>Telegram: control y alertas desde cualquier lado</h3>
 <details class="tip" style="margin:8px 0"><summary>Cómo configurarlo (2 minutos)</summary><ol style="margin:8px 0;padding-left:20px;line-height:1.5">
 <li>En Telegram buscá <b>@BotFather</b>, mandale <code>/newbot</code> y elegí un nombre. Te da un <b>token</b>.</li>
@@ -150,7 +165,48 @@ document.addEventListener('input',markDirty);document.addEventListener('change',
 document.addEventListener('click',e=>{if(e.target.closest('.chip,[data-dirty]'))markDirty(e)});
 
 async function realApi(p,b){const r=await fetch(p,b===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
-const api=window.MOCK_API||realApi;
+// ---------- nube (MQTT por WebSocket) ----------
+// Servida por https (no desde el ESP32, que es http) la página funciona en modo nube.
+const CLOUD=location.protocol=='https:'&&!window.MOCK_API;
+const CLOUD_PANEL_URL='https://jhonyv.github.io/Cultivo-esp32/';
+let mq=null,mqBase='',mqOnline=null;const pending={};
+function cloudCreds(){try{return JSON.parse(localStorage.getItem('cultivoCloud')||'null')}catch(e){return null}}
+function loadScript(src){return new Promise((ok,err)=>{const el=document.createElement('script');el.src=src;el.onload=ok;el.onerror=()=>err(new Error('No se pudo cargar '+src));document.head.appendChild(el)})}
+async function cloudConnect(c){
+ if(!window.mqtt)await loadScript('https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js');
+ mqBase='cultivo/'+c.id.trim().toLowerCase();
+ const url=/^wss?:\/\//.test(c.host)?c.host:`wss://${c.host.trim()}:8884/mqtt`;
+ return new Promise((ok,fail)=>{
+  mq=mqtt.connect(url,{username:c.user,password:c.pass,clientId:'panel-'+Math.random().toString(16).slice(2,10),reconnectPeriod:4000,connectTimeout:10000});
+  let first=true;
+  mq.on('connect',()=>{mq.subscribe([mqBase+'/res',mqBase+'/online']);if(first){first=false;ok()}cloudBadge()});
+  mq.on('error',e=>{if(first){first=false;mq.end(true);fail(new Error(/auth|Not authorized|5/.test(e.message)?'Usuario o contraseña incorrectos':'No se pudo conectar al servidor'))}});
+  mq.on('close',cloudBadge);
+  mq.on('message',(t,m)=>{const txt=m.toString();if(t.endsWith('/online')){mqOnline=txt=='1';cloudBadge();return}
+   let r;try{r=JSON.parse(txt)}catch(e){return}const p=pending[r.id];if(!p)return;delete pending[r.id];clearTimeout(p.t);
+   r.c>=400?p.fail(new Error((r.d&&r.d.error)||'Error '+r.c)):p.ok(r.d)});
+ })}
+function cloudApi(path,body){return new Promise((ok,fail)=>{
+ if(!mq||!mq.connected)return fail(new Error('Sin conexión a la nube'));
+ const [p,qs]=path.split('?'),q=qs?(new URLSearchParams(qs).get('range')||''):'';
+ const id=Math.random().toString(36).slice(2,10);
+ pending[id]={ok,fail,t:setTimeout(()=>{delete pending[id];fail(new Error('El equipo no responde: ¿está prendido y con internet?'))},12000)};
+ mq.publish(mqBase+'/req',JSON.stringify(body===undefined?{id,m:'GET',p,q}:{id,m:'POST',p,q,b:body}))})}
+function cloudBadge(){const b=$('cloudBadge');if(!b)return;const up=mq&&mq.connected;
+ b.textContent=!up?'☁️ reconectando…':mqOnline===false?'☁️ equipo sin conexión':'☁️ en la nube';b.className='badge cloud-only '+(up&&mqOnline!==false?'ok':'bad')}
+function cloudLogout(){try{localStorage.removeItem('cultivoCloud')}catch(e){}location.reload()}
+function showLogin(err){const c=cloudCreds()||{};const d=document.createElement('div');d.id='login';
+ d.innerHTML=`<div class="card"><h2>🌱 Cultivo en la nube</h2><div class="mut">Poné los datos de tu cluster de HiveMQ y el ID que aparece en Ajustes > Nube de la página del equipo.</div>
+ <div class="row"><label>Servidor<input id="lgHost" placeholder="abc123.s1.eu.hivemq.cloud" value="${esc(c.host||'')}"></label></div>
+ <div class="row"><label>Usuario<input id="lgUser" value="${esc(c.user||'')}" autocomplete="username"></label><label>Contraseña<input id="lgPass" type="password" autocomplete="current-password"></label></div>
+ <div class="row"><label>ID del equipo<input id="lgId" placeholder="3fa2" value="${esc(c.id||'')}"></label></div>
+ <div class="actions"><button class="btn" id="lgBtn">Entrar</button><span class="mut bad" id="lgErr">${esc(err||'')}</span></div>
+ <div class="mut" style="margin-top:10px">Los datos quedan guardados solo en este navegador.</div></div>`;
+ document.body.appendChild(d);
+ $('lgBtn').onclick=async()=>{const c={host:$('lgHost').value.trim(),user:$('lgUser').value.trim(),pass:$('lgPass').value,id:$('lgId').value.trim()};
+  if(!c.host||!c.user||!c.pass||!c.id)return $('lgErr').textContent='Completá todos los campos';
+  $('lgErr').textContent='Conectando…';try{await cloudConnect(c);try{localStorage.setItem('cultivoCloud',JSON.stringify(c))}catch(e){}d.remove();start()}catch(e){$('lgErr').textContent=e.message}}}
+const api=window.MOCK_API||(CLOUD?cloudApi:realApi);
 function toast(m,bad){const t=$('toast');t.textContent=m;t.style.color=bad?'var(--err)':'';t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),2500)}
 async function call(p,b,ok){try{const r=await api(p,b);if(ok)toast(ok);return r}catch(e){toast(e.message,true);throw e}}
 
@@ -277,6 +333,9 @@ function refreshStates(p,status){S.relays.forEach((r,i)=>{const c=$(p+i);if(!c)r
 function renderSettings(){
  const w=S.wifi;$('wst').textContent=w.connected?`Conectado a ${w.ssid} · IP ${w.ip} · ${w.rssi} dBm`:(w.ssid?`Sin conexión a ${w.ssid}`:'Sin red configurada')+(w.ap?` · red "${w.apSsid}" activa`:'');
  if(dirty.has('ajustes'))return;
+ $('mqSt').textContent=C.mqttHost?(S.wifi.cloud?'Conectado':'Sin conectar (revisá los datos)'):'Desactivada';$('devId').textContent=S.device||'--';
+ $('cloudUrl').textContent=CLOUD_PANEL_URL;$('cloudUrl').href=CLOUD_PANEL_URL;
+ $('mqHost').value=C.mqttHost||'';$('mqPort').value=C.mqttPort||8883;$('mqUser').value=C.mqttUser||'';$('mqPass').placeholder=C.mqttPassSet?'guardada (vacío = no cambiar)':'';
  $('tgSt').textContent=C.telegramTokenSet?'Bot activo':'Bot desactivado';$('pwSt').textContent=C.webPasswordSet?'Con contraseña':'Sin contraseña';
  $('tgToken').placeholder=C.telegramTokenSet?'guardado (vacío = no cambiar)':'123456789:AA...';$('tgChat').value=C.telegramChat;$('tgAlerts').checked=C.telegramAlerts;
  $('leaf').value=C.leafOffset;$('alow').value=C.relayActiveLow?1:0;$('appw').value=C.apPassword;$('tz').value=C.tz;
@@ -284,6 +343,9 @@ function renderSettings(){
 }
 async function saveDevice(){const relays=C.relays.map((_,i)=>({name:$('n'+i).value,type:$('y'+i).value}));
  C=await call('/api/config',{relays,leafOffset:+$('leaf').value,relayActiveLow:$('alow').value=='1',apPassword:$('appw').value,tz:$('tz').value},'Ajustes guardados');dirty.delete('ajustes');await refresh()}
+async function saveCloud(off){const b=off?{mqttHost:''}:{mqttHost:$('mqHost').value.trim(),mqttPort:+$('mqPort').value||8883,mqttUser:$('mqUser').value.trim()};
+ if(!off&&$('mqPass').value)b.mqttPass=$('mqPass').value;
+ C=await call('/api/config',b,off?'Nube desactivada':'Nube guardada, conectando…');$('mqPass').value='';dirty.delete('ajustes');renderSettings()}
 async function saveTelegram(off){const b=off?{telegramToken:''}:{telegramChat:$('tgChat').value.trim(),telegramAlerts:$('tgAlerts').checked};
  if(!off&&$('tgToken').value.trim())b.telegramToken=$('tgToken').value.trim();
  C=await call('/api/config',b,off?'Bot desactivado':'Telegram guardado');$('tgToken').value='';dirty.delete('ajustes');renderSettings()}
@@ -370,5 +432,6 @@ window.addEventListener('hashchange',()=>{if(location.hash=='#historial')loadRan
 // ---------- ciclo ----------
 async function refresh(){try{S=await api('/api/status');if(!C)C=await api('/api/config');renderAll()}catch(e){}}
 async function loadHistory(){try{H=await api('/api/history');drawChart()}catch(e){}}
-show();refresh();loadHistory();if(location.hash=='#historial')loadRange();setInterval(refresh,3000);setInterval(loadHistory,60000);
+function start(){show();refresh();loadHistory();if(location.hash=='#historial')loadRange();setInterval(refresh,CLOUD?5000:3000);setInterval(loadHistory,CLOUD?300000:60000)}
+if(CLOUD){document.body.classList.add('cloud');const c=cloudCreds();if(c)cloudConnect(c).then(start,e=>showLogin(e.message));else showLogin()}else start();
 </script></body></html>
