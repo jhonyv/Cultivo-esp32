@@ -62,6 +62,10 @@ struct Settings {
   char telegramToken[64];   // token del bot de @BotFather, vacío = bot apagado
   char telegramChat[24];    // chat autorizado; vacío = el bot solo responde su chat id
   bool telegramAlerts;
+  char mqttHost[80];  // broker MQTT (ej. HiveMQ Cloud), vacío = nube apagada
+  uint16_t mqttPort;  // TLS, normalmente 8883
+  char mqttUser[48];
+  char mqttPass[64];
 };
 
 extern Settings settings;

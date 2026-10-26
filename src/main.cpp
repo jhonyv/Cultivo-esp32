@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <Wire.h>
+#include "api.h"
 #include "automation.h"
+#include "cloud.h"
 #include "clock.h"
 #include "config.h"
 #include "history.h"
@@ -26,6 +28,7 @@ void setup() {
   netBegin();
   webBegin();
   telegramBegin();
+  cloudBegin();
 }
 
 void loop() {
@@ -36,6 +39,8 @@ void loop() {
   historyLoop();
   automationLoop();
   telegramLoop();
+  cloudLoop();
+  apiLoop();
   relaysUpdate();
   delay(2);
 }

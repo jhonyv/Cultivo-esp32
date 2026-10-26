@@ -90,6 +90,10 @@ static void settingsDefaults() {
   settings.telegramToken[0] = 0;
   settings.telegramChat[0] = 0;
   settings.telegramAlerts = true;
+  settings.mqttHost[0] = 0;
+  settings.mqttPort = 8883;
+  settings.mqttUser[0] = 0;
+  settings.mqttPass[0] = 0;
 }
 
 static void lightToJson(const LightSchedule& l, JsonObject o) {
@@ -178,12 +182,17 @@ void settingsToJson(JsonObject obj, bool secrets) {
   obj["tz"] = settings.tz;
   obj["telegramChat"] = settings.telegramChat;
   obj["telegramAlerts"] = settings.telegramAlerts;
+  obj["mqttHost"] = settings.mqttHost;
+  obj["mqttPort"] = settings.mqttPort;
+  obj["mqttUser"] = settings.mqttUser;
   if (secrets) {
     obj["webPassword"] = settings.webPassword;
     obj["telegramToken"] = settings.telegramToken;
+    obj["mqttPass"] = settings.mqttPass;
   } else {
     obj["webPasswordSet"] = settings.webPassword[0] != 0;
     obj["telegramTokenSet"] = settings.telegramToken[0] != 0;
+    obj["mqttPassSet"] = settings.mqttPass[0] != 0;
   }
   JsonArray arr = obj["relays"].to<JsonArray>();
   for (uint8_t i = 0; i < NUM_RELAYS; i++) {
@@ -239,6 +248,10 @@ bool settingsFromJson(JsonObjectConst obj, String& error) {
   if (obj["telegramToken"].is<const char*>()) strlcpy(s.telegramToken, obj["telegramToken"], sizeof(s.telegramToken));
   if (obj["telegramChat"].is<const char*>()) strlcpy(s.telegramChat, obj["telegramChat"], sizeof(s.telegramChat));
   if (obj["telegramAlerts"].is<bool>()) s.telegramAlerts = obj["telegramAlerts"];
+  if (obj["mqttHost"].is<const char*>()) strlcpy(s.mqttHost, obj["mqttHost"], sizeof(s.mqttHost));
+  if (obj["mqttPort"].is<int>()) s.mqttPort = constrain(obj["mqttPort"].as<int>(), 1, 65535);
+  if (obj["mqttUser"].is<const char*>()) strlcpy(s.mqttUser, obj["mqttUser"], sizeof(s.mqttUser));
+  if (obj["mqttPass"].is<const char*>()) strlcpy(s.mqttPass, obj["mqttPass"], sizeof(s.mqttPass));
 
   JsonArrayConst arr = obj["relays"];
   for (uint8_t i = 0; i < arr.size() && i < NUM_RELAYS; i++) {
