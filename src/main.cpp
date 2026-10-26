@@ -8,6 +8,7 @@
 #include "relays.h"
 #include "sensors.h"
 #include "settings.h"
+#include "telegram.h"
 #include "web.h"
 
 void setup() {
@@ -19,10 +20,12 @@ void setup() {
 
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_FREQ);
   clockBegin();
+  historyBegin();
   sensorsBegin();
 
   netBegin();
   webBegin();
+  telegramBegin();
 }
 
 void loop() {
@@ -32,6 +35,7 @@ void loop() {
   clockLoop();
   historyLoop();
   automationLoop();
+  telegramLoop();
   relaysUpdate();
   delay(2);
 }

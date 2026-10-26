@@ -86,6 +86,10 @@ static void settingsDefaults() {
   settings.leafOffset = -2.0f;
   strlcpy(settings.apPassword, AP_PASSWORD_DEFAULT, sizeof(settings.apPassword));
   strlcpy(settings.tz, TZ_DEFAULT, sizeof(settings.tz));
+  settings.webPassword[0] = 0;
+  settings.telegramToken[0] = 0;
+  settings.telegramChat[0] = 0;
+  settings.telegramAlerts = true;
 }
 
 static void lightToJson(const LightSchedule& l, JsonObject o) {
@@ -167,11 +171,20 @@ static bool eventsFromJson(JsonArrayConst arr, RelayConfig& r, String& error) {
   return true;
 }
 
-void settingsToJson(JsonObject obj) {
+void settingsToJson(JsonObject obj, bool secrets) {
   obj["relayActiveLow"] = settings.relayActiveLow;
   obj["leafOffset"] = settings.leafOffset;
   obj["apPassword"] = settings.apPassword;
   obj["tz"] = settings.tz;
+  obj["telegramChat"] = settings.telegramChat;
+  obj["telegramAlerts"] = settings.telegramAlerts;
+  if (secrets) {
+    obj["webPassword"] = settings.webPassword;
+    obj["telegramToken"] = settings.telegramToken;
+  } else {
+    obj["webPasswordSet"] = settings.webPassword[0] != 0;
+    obj["telegramTokenSet"] = settings.telegramToken[0] != 0;
+  }
   JsonArray arr = obj["relays"].to<JsonArray>();
   for (uint8_t i = 0; i < NUM_RELAYS; i++) {
     JsonObject r = arr.add<JsonObject>();
@@ -222,6 +235,10 @@ bool settingsFromJson(JsonObjectConst obj, String& error) {
     strlcpy(s.apPassword, p, sizeof(s.apPassword));
   }
   if (obj["tz"].is<const char*>()) strlcpy(s.tz, obj["tz"], sizeof(s.tz));
+  if (obj["webPassword"].is<const char*>()) strlcpy(s.webPassword, obj["webPassword"], sizeof(s.webPassword));
+  if (obj["telegramToken"].is<const char*>()) strlcpy(s.telegramToken, obj["telegramToken"], sizeof(s.telegramToken));
+  if (obj["telegramChat"].is<const char*>()) strlcpy(s.telegramChat, obj["telegramChat"], sizeof(s.telegramChat));
+  if (obj["telegramAlerts"].is<bool>()) s.telegramAlerts = obj["telegramAlerts"];
 
   JsonArrayConst arr = obj["relays"];
   for (uint8_t i = 0; i < arr.size() && i < NUM_RELAYS; i++) {
@@ -283,7 +300,7 @@ void settingsBegin() {
 
 void settingsSave() {
   JsonDocument doc;
-  settingsToJson(doc.to<JsonObject>());
+  settingsToJson(doc.to<JsonObject>(), true);
   String json;
   serializeJson(doc, json);
   Preferences prefs;

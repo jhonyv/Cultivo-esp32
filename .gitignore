@@ -1,3 +1,4 @@
 .pio/
 .vscode/
 src/web_page.h
+__pycache__/

@@ -58,13 +58,18 @@ struct Settings {
   float leafOffset;  // °C, temperatura de hoja respecto del aire (para VPD)
   char apPassword[33];
   char tz[48];
+  char webPassword[33];     // vacía = página sin contraseña (usuario "cultivo")
+  char telegramToken[64];   // token del bot de @BotFather, vacío = bot apagado
+  char telegramChat[24];    // chat autorizado; vacío = el bot solo responde su chat id
+  bool telegramAlerts;
 };
 
 extern Settings settings;
 
 void settingsBegin();
 void settingsSave();
-void settingsToJson(JsonObject obj);
+// Con secrets=false (para la página) no incluye la contraseña web ni el token del bot.
+void settingsToJson(JsonObject obj, bool secrets = false);
 // Aplica solo los campos presentes en el JSON. Devuelve false si algún valor es inválido.
 bool settingsFromJson(JsonObjectConst obj, String& error);
 

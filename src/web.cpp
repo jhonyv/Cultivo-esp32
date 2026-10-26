@@ -108,9 +108,16 @@ static void handleRelay() {
   handleStatus();
 }
 
+// GET /api/history?range=day|week|month
 static void handleHistory() {
   JsonDocument doc;
-  historyToJson(doc.to<JsonObject>());
+  String range = server.arg("range");
+  if (range == "week") historyHourlyToJson(doc.to<JsonObject>(), 7 * 24);
+  else if (range == "month") historyDailyToJson(doc.to<JsonObject>(), 31);
+  else {
+    historyToJson(doc.to<JsonObject>());
+    historyDailyToJson(doc["today"].to<JsonObject>(), 1);
+  }
   sendJson(doc);
 }
 
@@ -213,18 +220,28 @@ static void handleNotFound() {
   sendError(404, "no encontrado");
 }
 
+// Si hay contraseña configurada, toda la página la pide (usuario "cultivo").
+static void route(const char* uri, HTTPMethod method, void (*fn)()) {
+  server.on(uri, method, [fn]() {
+    if (settings.webPassword[0] && !server.authenticate("cultivo", settings.webPassword)) {
+      return server.requestAuthentication(BASIC_AUTH, "Cultivo");
+    }
+    fn();
+  });
+}
+
 void webBegin() {
-  server.on("/", HTTP_GET, handleRoot);
-  server.on("/api/status", HTTP_GET, handleStatus);
-  server.on("/api/relay", HTTP_POST, handleRelay);
-  server.on("/api/history", HTTP_GET, handleHistory);
-  server.on("/api/config", HTTP_GET, handleGetConfig);
-  server.on("/api/config", HTTP_POST, handlePostConfig);
-  server.on("/api/wifi/scan", HTTP_GET, handleScan);
-  server.on("/api/wifi", HTTP_POST, handleWifi);
-  server.on("/api/wifi/forget", HTTP_POST, handleForget);
-  server.on("/api/time", HTTP_POST, handleTime);
-  server.on("/api/restart", HTTP_POST, handleRestart);
+  route("/", HTTP_GET, handleRoot);
+  route("/api/status", HTTP_GET, handleStatus);
+  route("/api/relay", HTTP_POST, handleRelay);
+  route("/api/history", HTTP_GET, handleHistory);
+  route("/api/config", HTTP_GET, handleGetConfig);
+  route("/api/config", HTTP_POST, handlePostConfig);
+  route("/api/wifi/scan", HTTP_GET, handleScan);
+  route("/api/wifi", HTTP_POST, handleWifi);
+  route("/api/wifi/forget", HTTP_POST, handleForget);
+  route("/api/time", HTTP_POST, handleTime);
+  route("/api/restart", HTTP_POST, handleRestart);
   server.onNotFound(handleNotFound);
   server.begin();
 }
