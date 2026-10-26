@@ -3,6 +3,8 @@
 
 static bool states[NUM_RELAYS];
 static bool autoStates[NUM_RELAYS];
+static uint32_t pulseStart[NUM_RELAYS];
+static uint32_t pulseMs[NUM_RELAYS];
 
 static void writeRelay(uint8_t i, bool on) {
   digitalWrite(RELAY_PINS[i], on != settings.relayActiveLow ? HIGH : LOW);
@@ -23,13 +25,14 @@ void relaysBegin() {
 
 void relaysUpdate() {
   for (uint8_t i = 0; i < NUM_RELAYS; i++) {
+    if (pulseMs[i] && millis() - pulseStart[i] >= pulseMs[i]) pulseMs[i] = 0;
     bool on;
     switch (settings.relays[i].mode) {
       case RelayMode::On: on = true; break;
       case RelayMode::Auto: on = autoStates[i]; break;
       default: on = false; break;
     }
-    writeRelay(i, on);
+    writeRelay(i, on || pulseMs[i]);
   }
 }
 
@@ -37,4 +40,16 @@ bool relayState(uint8_t i) { return i < NUM_RELAYS && states[i]; }
 
 void relaySetAuto(uint8_t i, bool on) {
   if (i < NUM_RELAYS) autoStates[i] = on;
+}
+
+void relayPulse(uint8_t i, uint32_t seconds) {
+  if (i >= NUM_RELAYS) return;
+  pulseStart[i] = millis();
+  pulseMs[i] = seconds * 1000;
+}
+
+uint32_t relayPulseRemaining(uint8_t i) {
+  if (i >= NUM_RELAYS || !pulseMs[i]) return 0;
+  uint32_t elapsed = millis() - pulseStart[i];
+  return elapsed >= pulseMs[i] ? 0 : (pulseMs[i] - elapsed + 999) / 1000;
 }

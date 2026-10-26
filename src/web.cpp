@@ -2,7 +2,9 @@
 #include <ArduinoJson.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include "automation.h"
 #include "clock.h"
+#include "history.h"
 #include "net.h"
 #include "relays.h"
 #include "sensors.h"
@@ -50,6 +52,7 @@ static void handleStatus() {
   t["epoch"] = (uint32_t)time(nullptr);
   t["rtc"] = clockHasRtc();
   t["ntp"] = clockNtpSynced();
+  t["day"] = automationIsDay();
   if (clockValid()) {
     char buf[20];
     time_t now = time(nullptr);
@@ -76,24 +79,39 @@ static void handleStatus() {
     r["type"] = relayTypeName(settings.relays[i].type);
     r["mode"] = relayModeName(settings.relays[i].mode);
     r["on"] = relayState(i);
+    r["reason"] = automationReason(i);
+    if (uint32_t p = relayPulseRemaining(i)) r["pulse"] = p;
+    if (uint32_t n = automationNextLightChange(i)) r["next"] = n;
   }
   doc["uptime"] = millis() / 1000;
   doc["heap"] = ESP.getFreeHeap();
   sendJson(doc);
 }
 
-// POST /api/relay {"id":0..7,"mode":"on"|"off"|"auto"}
+// POST /api/relay {"id":0..7,"mode":"on"|"off"|"auto"} o {"id":0..7,"pulse":segundos}
 static void handleRelay() {
   JsonDocument doc;
   if (!parseBody(doc)) return;
   int id = doc["id"] | -1;
-  RelayMode mode;
   if (id < 0 || id >= NUM_RELAYS) return sendError(400, "id inválido");
-  if (!doc["mode"].is<const char*>() || !relayModeFromName(doc["mode"], mode)) return sendError(400, "modo inválido");
-  settings.relays[id].mode = mode;
-  settingsSave();
+  if (doc["pulse"].is<int>()) {
+    int sec = doc["pulse"];
+    if (sec < 0 || sec > 3600) return sendError(400, "pulso inválido (0-3600 s)");
+    relayPulse(id, sec);
+  } else {
+    RelayMode mode;
+    if (!doc["mode"].is<const char*>() || !relayModeFromName(doc["mode"], mode)) return sendError(400, "modo inválido");
+    settings.relays[id].mode = mode;
+    settingsSave();
+  }
   relaysUpdate();
   handleStatus();
+}
+
+static void handleHistory() {
+  JsonDocument doc;
+  historyToJson(doc.to<JsonObject>());
+  sendJson(doc);
 }
 
 static void handleGetConfig() {
@@ -179,7 +197,10 @@ static void handleRestart() {
   ESP.restart();
 }
 
-static void handleRoot() { server.send_P(200, "text/html; charset=utf-8", INDEX_HTML); }
+static void handleRoot() {
+  server.sendHeader("Content-Encoding", "gzip");
+  server.send_P(200, "text/html; charset=utf-8", (const char*)INDEX_HTML_GZ, INDEX_HTML_GZ_LEN);
+}
 
 static void handleNotFound() {
   // Portal cautivo: cualquier URL desconocida (las que usan Android/iOS para detectar
@@ -196,6 +217,7 @@ void webBegin() {
   server.on("/", HTTP_GET, handleRoot);
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/relay", HTTP_POST, handleRelay);
+  server.on("/api/history", HTTP_GET, handleHistory);
   server.on("/api/config", HTTP_GET, handleGetConfig);
   server.on("/api/config", HTTP_POST, handlePostConfig);
   server.on("/api/wifi/scan", HTTP_GET, handleScan);

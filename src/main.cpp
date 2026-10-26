@@ -1,7 +1,9 @@
 #include <Arduino.h>
 #include <Wire.h>
+#include "automation.h"
 #include "clock.h"
 #include "config.h"
+#include "history.h"
 #include "net.h"
 #include "relays.h"
 #include "sensors.h"
@@ -28,6 +30,8 @@ void loop() {
   webLoop();
   sensorsLoop();
   clockLoop();
+  historyLoop();
+  automationLoop();
   relaysUpdate();
   delay(2);
 }

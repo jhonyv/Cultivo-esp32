@@ -2,6 +2,8 @@
 #include <ArduinoJson.h>
 #include "config.h"
 
+#define MAX_IRRIGATION_EVENTS 8
+
 enum class RelayType : uint8_t {
   Generic,
   Light,
@@ -15,14 +17,43 @@ enum class RelayType : uint8_t {
 
 enum class RelayMode : uint8_t { Off, On, Auto };
 
+// Ciclo de luz: encendida onMin minutos, apagada offMin, repitiendo desde anchor.
+// Con on+off = 24 h es un horario diario común (18/6, 12/12...); si no, un ciclo libre (13/13).
+struct LightSchedule {
+  uint16_t onMin;
+  uint16_t offMin;
+  uint32_t anchor;  // epoch UTC de un encendido
+};
+
+struct IrrigationEvent {
+  uint16_t startMin;  // minuto del día (hora local)
+  uint16_t durSec;
+  bool enabled;
+};
+
 struct RelayConfig {
   char name[24];
   RelayType type;
   RelayMode mode;
+  LightSchedule light;  // usado si type == Light
+  uint8_t eventCount;   // usado si type == Irrigation
+  IrrigationEvent events[MAX_IRRIGATION_EVENTS];
+};
+
+struct ClimateTargets {
+  float tempMin, tempMax;  // °C
+  float humMin, humMax;    // %HR
+};
+
+struct ClimateConfig {
+  ClimateTargets day, night;  // día = alguna luz encendida
+  float tempHyst, humHyst;
+  uint16_t ventOnMin, ventEveryMin;  // renovación de aire: extractor X min cada Y min (0 = desactivado)
 };
 
 struct Settings {
   RelayConfig relays[NUM_RELAYS];
+  ClimateConfig climate;
   bool relayActiveLow;
   float leafOffset;  // °C, temperatura de hoja respecto del aire (para VPD)
   char apPassword[33];
