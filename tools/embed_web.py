@@ -1,5 +1,5 @@
-# Script de PlatformIO (pre-build): comprime web/index.html y lo genera como
-# src/web_page.h para servirlo desde la flash con Content-Encoding: gzip.
+# Script de PlatformIO (pre-build): comprime web/index.html con gzip y lo
+# genera como src/web_page.h para servirlo comprimido desde la flash.
 import gzip
 import os
 
