@@ -112,6 +112,26 @@ Sensor capacitivo: VCC ── 3V3, GND ── GND, AOUT ── A0 (el segundo a 
   - **Regar extra** si baja de un %: solo en Auto, con luces prendidas, al menos 1 h entre riegos extra y con un tope por día.
 - Clavalos a la misma profundidad en macetas parecidas y lejos del gotero; el equipo usa el promedio. Si uno falla, sigue con los demás.
 
+## Nivel del tanque (opcional)
+
+Un sensor ultrasónico **a prueba de agua JSN-SR04T** (o AJ-SR04M) por carpa, montado en la tapa del tanque apuntando al agua.
+
+| Carpa | TRIG | ECHO |
+|---|---|---|
+| 1 | GPIO13 | GPIO34 |
+| 2 | GPIO14 | GPIO35 |
+
+```
+JSN-SR04T  VCC ── 5V      GND ── GND
+           TRIG ── GPIO13 (carpa 1) / GPIO14 (carpa 2)
+           ECHO ── 1 kΩ ──┬── GPIO34 (carpa 1) / GPIO35 (carpa 2)
+                          └── 2 kΩ ── GND      (divisor: el ECHO sale a 5 V)
+```
+
+- El sensor tiene que quedar al menos **25 cm** por encima del agua con el tanque lleno (más cerca no mide).
+- Se activa en Riego > Tanque: cargás la distancia con el tanque vacío y lleno (o con los botones "lectura actual") y los litros.
+- **Avisarme debajo de X %** manda una alerta por Telegram; **No prender la bomba debajo de X %** bloquea el riego de esa carpa (horario, extra y "Regar ahora") para que la bomba no trabaje en seco.
+
 ## 220 V – seguridad
 
 - Cortar siempre la **fase** con el relé (no el neutro).

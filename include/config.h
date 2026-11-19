@@ -21,6 +21,10 @@ static const uint8_t RELAY_PINS[NUM_GPIO_RELAYS] = {16, 17, 18, 19, 23, 25, 26, 
 #define ADS1115_ADDR 0x48     // humedad de suelo (opcional), uno por bus/carpa
 #define SOIL_SENSORS_MAX 4    // canales A0..A3 del ADS1115
 
+// Nivel del tanque (opcional): ultrasónico JSN-SR04T por carpa. ECHO por divisor 1k/2k (sale a 5 V).
+static const uint8_t TANK_TRIG_PINS[NUM_TENTS] = {13, 14};
+static const uint8_t TANK_ECHO_PINS[NUM_TENTS] = {34, 35};  // solo entrada
+
 #define PIN_BUTTON 0  // botón BOOT: mantener 5 s para borrar el WiFi
 #define PIN_LED 2
 

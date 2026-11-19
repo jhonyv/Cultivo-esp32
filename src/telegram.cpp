@@ -9,6 +9,7 @@
 #include "sensors.h"
 #include "settings.h"
 #include "soil.h"
+#include "tank.h"
 
 struct Command {
   uint8_t relay;
@@ -29,14 +30,16 @@ struct Alert {
   bool sent;
 };
 
-static const uint8_t NUM_ALERTS = 6;
+static const uint8_t NUM_ALERTS = 8;
 static const Alert ALERT_TEXTS[NUM_ALERTS] = {
     {"🔥 Temperatura alta", "✅ Temperatura normal otra vez", 0, false},
     {"🥶 Temperatura baja", "✅ Temperatura normal otra vez", 0, false},
-    {"💦 Humedad muy alta", "✅ Humedad normal otra vez", 0, false},
-    {"🏜️ Humedad muy baja", "✅ Humedad normal otra vez", 0, false},
+    {"💦 Aire muy húmedo (VPD muy bajo)", "✅ VPD normal otra vez", 0, false},
+    {"🏜️ Aire muy seco (VPD muy alto)", "✅ VPD normal otra vez", 0, false},
     {"⚠️ Los sensores de temperatura/humedad no responden", "✅ Los sensores volvieron a responder", 0, false},
     {"⚠️ Los sensores de suelo no responden", "✅ Los sensores de suelo volvieron a responder", 0, false},
+    {"🛢️ Tanque bajo", "✅ Tanque cargado otra vez", 0, false},
+    {"⚠️ El sensor del tanque no responde", "✅ El sensor del tanque volvió a responder", 0, false},
 };
 static Alert alerts[NUM_TENTS][NUM_ALERTS];
 
@@ -79,6 +82,11 @@ static String statusText() {
       const SoilReading& so = soil(t);
       if (so.valid) s += "🪴 Suelo " + String(so.percent, 0) + " %\n";
       else s += "⚠️ Sin lectura de suelo\n";
+    }
+    if (settings.tents[t].tank.enabled) {
+      const TankReading& k = tank(t);
+      if (k.valid) s += "🛢️ Tanque " + String(k.percent, 0) + " % (" + String(k.liters, 0) + " l)\n";
+      else s += "⚠️ Sin lectura del tanque\n";
     }
     for (uint8_t i = 0; i < NUM_RELAYS; i++) {
       const RelayConfig& r = settings.relays[i];
@@ -193,14 +201,17 @@ static void checkAlerts() {
     if (!settings.tents[tent].enabled) continue;
     const Climate& c = climate(tent);
     const ClimateConfig& cfg = settings.tents[tent].climate;
+    const TankConfig& tk = settings.tents[tent].tank;
     const ClimateTargets& t = automationIsDay(tent) ? cfg.day : cfg.night;
     bool active[NUM_ALERTS] = {
         c.valid && c.temperature > t.tempMax + 2,
         c.valid && c.temperature < t.tempMin - 2,
-        c.valid && c.humidity > t.humMax + 10,
-        c.valid && c.humidity < t.humMin - 10,
+        c.valid && c.vpd < t.vpdMin - 0.3f,
+        c.valid && c.vpd > t.vpdMax + 0.4f,
         !c.valid,
         settings.tents[tent].soil.enabled && !soil(tent).valid,
+        tk.enabled && tk.alertPct && tank(tent).valid && tank(tent).percent < tk.alertPct,
+        tk.enabled && !tank(tent).valid,
     };
     String prefix = String(settings.tents[tent].name) + ": ";
     for (uint8_t i = 0; i < NUM_ALERTS; i++) {

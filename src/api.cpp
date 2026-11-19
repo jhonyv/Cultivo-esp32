@@ -9,6 +9,7 @@
 #include "sensors.h"
 #include "settings.h"
 #include "soil.h"
+#include "tank.h"
 
 static uint32_t restartAt = 0;
 
@@ -59,6 +60,17 @@ static void statusJson(JsonDocument& doc) {
         so["temperature"] = serialized(String(r.temperature, 1));
         so["humidity"] = serialized(String(r.humidity, 1));
       }
+    }
+    if (settings.tents[t].tank.enabled) {
+      const TankReading& k = tank(t);
+      JsonObject tk = o["tank"].to<JsonObject>();
+      tk["valid"] = k.valid;
+      if (k.valid) {
+        tk["cm"] = serialized(String(k.cm, 1));
+        tk["percent"] = serialized(String(k.percent, 0));
+        tk["liters"] = serialized(String(k.liters, 1));
+      }
+      tk["low"] = tankLow(t);
     }
     if (settings.tents[t].soil.enabled) {
       const SoilReading& s = soil(t);

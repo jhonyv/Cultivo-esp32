@@ -80,12 +80,11 @@ canvas{width:100%;height:190px;display:block}
 
 <section id="clima"><h2>🌡️ Temperatura y humedad</h2>
 <div class="card"><h3>Etapa</h3><div class="mut">Carga rangos sugeridos; después los podés ajustar.</div><div class="chips" id="stages"></div></div>
-<div class="card"><h3>Controlar la humedad por</h3><div class="mut">Con <b>VPD</b>, el humidificador, el deshumidificador y los coolers (en modo por clima) buscan el VPD que pongas, sin que tengas que calcular la humedad según la temperatura.</div>
-<div class="chips" data-nodirty id="vpdSel"></div></div>
+<div class="card"><div class="mut">Cada equipo corrige una sola cosa: el <b>aire acondicionado</b> y el <b>calefactor</b> la temperatura; el <b>humidificador</b> y el <b>deshumidificador</b> el VPD (la humedad justa para esa temperatura). El intractor ayuda con las dos.</div></div>
 <div class="card" id="targets"></div>
 <div class="card"><h3>Ajuste fino</h3><div class="mut">Si no sabés qué poner, dejalo como viene.</div>
-<div class="row"><label>Margen de temperatura (°C)<input id="tHyst" type="number" step="0.1"></label><label>Margen de humedad (%)<input id="hHyst" type="number" step="0.5"></label></div>
-<div class="mut">Es cuánto tiene que volver el valor antes de apagar, para que los equipos no prendan y apaguen a cada rato cuando están justo en el límite (lo que en la jerga se llama <i>histéresis</i>). Ejemplo: máximo 28 °C y margen 0,5: el extractor prende al pasar los 28 °C y se apaga recién cuando baja de 27,5 °C. Con la humedad es igual: máximo 70 % y margen 3, prende arriba de 70 % y apaga debajo de 67 %.</div>
+<div class="row"><label>Margen de temperatura (°C)<input id="tHyst" type="number" step="0.1"></label></div>
+<div class="mut">Es cuánto tiene que volver el valor antes de apagar, para que los equipos no prendan y apaguen a cada rato cuando están justo en el límite (lo que en la jerga se llama <i>histéresis</i>). Ejemplo: máximo 28 °C y margen 0,5: el extractor prende al pasar los 28 °C y se apaga recién cuando baja de 27,5 °C. Con el VPD el margen es fijo (0,05 kPa).</div>
 <div class="row"><label>Renovación de aire: prender el extractor (min)<input id="ventOn" type="number" min="0"></label><label>cada (min)<input id="ventEvery" type="number" min="0"></label></div>
 <div class="mut">Aunque la temperatura y la humedad estén bien, las plantas consumen el CO₂ del aire: la renovación prende el extractor un rato cada tanto para meter aire nuevo. Ejemplo: 5 cada 30 = 5 minutos de extractor cada media hora. 0 la desactiva.</div></div>
 <div class="card"><h3>Ventilación</h3><div class="mut" style="margin-bottom:6px">Elegí cómo trabaja cada extractor/intractor en Auto: <b>Por clima</b> (prende con calor, humedad alta o renovación), <b>Por horario</b> (en las franjas que pongas) o <b>Permanente</b> (24/7, lo más común para el extractor).</div><div id="fans"></div></div>
@@ -102,6 +101,7 @@ canvas{width:100%;height:190px;display:block}
 <li><b>Tierra/sustrato:</b> 1-2 riegos por día buscando ~10-20 % de drenaje. <b>Coco:</b> 3-6 pulsos chicos por día.</li>
 <li>Empezá corto, mirá el peso de la maceta y el drenaje, y subí de a poco. Para más adelante se puede sumar un sensor de humedad de suelo o de nivel del tanque.</li>
 </ul></details>
+<div class="card" id="tankCard"><div class="rhead"><h3>🛢️ Tanque</h3><span class="big" id="tankPct" style="font-size:1.35rem"></span></div><div class="mut" id="tankLive" style="margin-top:4px"></div><div id="tankCfg"></div></div>
 <div class="card" id="soilCard"><div class="rhead"><h3>🪴 Humedad de suelo</h3><span class="big" id="soilPct" style="font-size:1.35rem"></span></div><div class="mut" id="soilLive" style="margin-top:4px"></div><div id="soilCfg"></div></div>
 <div id="irrig"></div></section>
 
@@ -165,10 +165,10 @@ const AUX=['generic','humidifier','dehumidifier','heater','ac'];
 const MODES=[['off','Off'],['auto','Auto'],['on','On']];
 const SECTIONS=[['inicio','🏠','Inicio'],['luz','💡','Iluminación'],['clima','🌡️','Temperatura y humedad'],['riego','💧','Riego'],['historial','📈','Historial'],['ajustes','⚙️','Ajustes']];
 const LIGHT_PRESETS=[[12,12],[16,8],[18,6],[20,4]];
-const STAGES={'Esquejes':{day:{tMin:22,tMax:28,hMin:65,hMax:80,vMin:.4,vMax:.8},night:{tMin:20,tMax:26,hMin:65,hMax:80,vMin:.4,vMax:.8}},
- 'Vegetativo':{day:{tMin:22,tMax:28,hMin:55,hMax:70,vMin:.8,vMax:1.2},night:{tMin:18,tMax:24,hMin:55,hMax:70,vMin:.6,vMax:1}},
- 'Floración':{day:{tMin:20,tMax:26,hMin:45,hMax:55,vMin:1,vMax:1.5},night:{tMin:18,tMax:22,hMin:45,hMax:55,vMin:.8,vMax:1.2}},
- 'Flora tardía':{day:{tMin:18,tMax:24,hMin:40,hMax:50,vMin:1.2,vMax:1.6},night:{tMin:16,tMax:21,hMin:40,hMax:50,vMin:1,vMax:1.4}}};
+const STAGES={'Esquejes':{day:{tMin:22,tMax:28,vMin:.4,vMax:.8},night:{tMin:20,tMax:26,vMin:.4,vMax:.8}},
+ 'Vegetativo':{day:{tMin:22,tMax:28,vMin:.8,vMax:1.2},night:{tMin:18,tMax:24,vMin:.6,vMax:1}},
+ 'Floración':{day:{tMin:20,tMax:26,vMin:1,vMax:1.5},night:{tMin:18,tMax:22,vMin:.8,vMax:1.2}},
+ 'Flora tardía':{day:{tMin:18,tMax:24,vMin:1.2,vMax:1.6},night:{tMin:16,tMax:21,vMin:1,vMax:1.4}}};
 let S=null,C=null,H=null,chartVar='th',menuOpen=false;
 // Carpa que se está mirando (los relés mantienen su número global 0-15).
 let TENT=0;try{TENT=+localStorage.getItem('cultivoTent')||0}catch(e){}
@@ -259,10 +259,10 @@ function renderHome(){
  const c=tentS().climate,t=targets();
  const cls=(v,lo,hi)=>v<lo||v>hi?'warn':'ok';
  $('t').innerHTML=c.valid?`<span class="${cls(c.temperature,t.tMin,t.tMax)}">${c.temperature}°</span>`:'--';
- $('h').innerHTML=c.valid?`<span class="${cls(c.humidity,t.hMin,t.hMax)}">${c.humidity}%</span>`:'--';
- const vm=tentC().climate.vpdControl,vlo=vm?t.vMin:vpd(t.tMin,t.hMax),vhi=vm?t.vMax:vpd(t.tMax,t.hMin);
+ const vlo=t.vMin,vhi=t.vMax;
+ $('h').innerHTML=c.valid?`<span>${c.humidity}%</span>`:'--';
  $('v').innerHTML=c.valid?`<span class="${cls(c.vpd,vlo-.05,vhi+.05)}">${c.vpd}</span> <span class="mut">kPa</span>`:'--';
- $('tT').textContent=`objetivo ${t.tMin}-${t.tMax} °C`;$('hT').textContent=vm?'según el VPD':`objetivo ${t.hMin}-${t.hMax} %`;$('vT').textContent=`objetivo ${vlo.toFixed(1)}-${vhi.toFixed(1)}`;
+ $('tT').textContent=`objetivo ${t.tMin}-${t.tMax} °C`;$('hT').textContent='se ajusta por VPD';$('vT').textContent=`objetivo ${vlo.toFixed(1)}-${vhi.toFixed(1)}`;
  $('dayLbl').textContent=tentS().day?'☀️ Día':'🌙 Noche';
  $('clk').textContent=S.time.valid?S.time.local.slice(11,16):'sin hora';$('clkS').textContent=S.time.valid?S.time.local.slice(0,10):'';
  $('hdrTime').textContent=S.time.valid?S.time.local.slice(11,16):'';
@@ -274,7 +274,7 @@ function renderHome(){
  const lt=L.length?L.map(([r,i])=>{const l=C.relays[i].light;return `${esc(r.name)}: ${hrs(l.on)}/${hrs(l.off)} · ${r.on?'prendida':'apagada'}${r.next&&r.mode=='auto'?' · cambia en '+dur(r.next):''}`}).join('<br>'):'Sin luces asignadas';
  const ft=F.length?F.map(([r])=>`${esc(r.name)}: ${r.on?'prendido':'apagado'}`).join(' · '):'Sin ventilación asignada';
  let nx=null;I.forEach(([r,i])=>C.relays[i].events.filter(e=>e.en).forEach(e=>{const now=S.time.valid?toMin(S.time.local.slice(11,16)):0;const d=(toMin(e.start)-now+1440)%1440;if(nx===null||d<nx.d)nx={d,s:e.start,n:r.name}}));
- const so=tentS().soil,it=(I.length?(nx?`Próximo: ${nx.s} (${esc(nx.n)})`:'Sin riegos programados'):'Sin riego asignado')+(so?' · suelo '+(so.valid?so.percent+' %':'sin lectura'):'');
+ const so=tentS().soil,tk=tentS().tank,it=(I.length?(nx?`Próximo: ${nx.s} (${esc(nx.n)})`:'Sin riegos programados'):'Sin riego asignado')+(so?' · suelo '+(so.valid?so.percent+' %':'sin lectura'):'')+(tk?' · tanque '+(tk.valid?tk.percent+' %':'sin lectura'):'');
  $('summary').innerHTML=[['luz','💡 Iluminación',lt],['clima','🌡️ Clima',ft],['riego','💧 Riego',it]].map(([k,h,b])=>`<a href="#${k}" class="card"><h3>${h} ›</h3><div class="mut" style="margin-top:6px">${b}</div></a>`).join('');
  drawChart();
 }
@@ -302,21 +302,16 @@ async function saveLight(){const on=Math.round(+$('lon').value*60),off=Math.roun
  const relays=C.relays.map(()=>({}));idx(['light']).forEach(([,i])=>relays[i]={light});
  C=await call('/api/config',{relays},'Horario guardado');dirty.delete('luz');await refresh()}
 
-function rangeInputs(k,t,vm){return `<div><b>${k=='day'?'☀️ Día (luces prendidas)':'🌙 Noche'}</b><div class="row">
+function rangeInputs(k,t){return `<div><b>${k=='day'?'☀️ Día (luces prendidas)':'🌙 Noche'}</b><div class="row">
  <label>Temp. mín (°C)<input type="number" step="0.5" id="${k}tMin" value="${t.tMin}" oninput="vpdHint()"></label><label>Temp. máx (°C)<input type="number" step="0.5" id="${k}tMax" value="${t.tMax}" oninput="vpdHint()"></label>
- <label ${vm?'hidden':''}>Hum. mín (%)<input type="number" id="${k}hMin" value="${t.hMin}" oninput="vpdHint()"></label><label ${vm?'hidden':''}>Hum. máx (%)<input type="number" id="${k}hMax" value="${t.hMax}" oninput="vpdHint()"></label>
- <label ${vm?'':'hidden'}>VPD mín (kPa)<input type="number" step="0.05" id="${k}vMin" value="${t.vMin}" oninput="vpdHint()"></label><label ${vm?'':'hidden'}>VPD máx (kPa)<input type="number" step="0.05" id="${k}vMax" value="${t.vMax}" oninput="vpdHint()"></label></div><div class="mut" id="${k}Vpd"></div></div>`}
-let VM=false;  // controlar por VPD (lo que se ve en el formulario)
+ <label>VPD mín (kPa)<input type="number" step="0.05" id="${k}vMin" value="${t.vMin}" oninput="vpdHint()"></label><label>VPD máx (kPa)<input type="number" step="0.05" id="${k}vMax" value="${t.vMax}" oninput="vpdHint()"></label></div><div class="mut" id="${k}Vpd"></div></div>`}
 const rhFor=(t,v)=>Math.max(0,Math.min(100,(svp(t+(C?C.leafOffset:-2))-v)/svp(t)*100));
-function setVpdMode(on){VM=on;dirty.add('clima');document.querySelectorAll('#vpdSel .chip').forEach((c,k)=>c.classList.toggle('sel',!!k==on));
- ['day','night'].forEach(k=>{['hMin','hMax'].forEach(n=>$(k+n).parentElement.hidden=on);['vMin','vMax'].forEach(n=>$(k+n).parentElement.hidden=!on)});vpdHint()}
 function renderClimate(){
  const cl=tentC().climate;
  $('stages').innerHTML=Object.keys(STAGES).map(s=>`<button class="chip" onclick="setStage('${s}')">${s}</button>`).join('');
  if(!dirty.has('clima')){
-  VM=!!cl.vpdControl;$('vpdSel').innerHTML=[['Rango de humedad',0],['VPD',1]].map(([l,k])=>`<button class="chip ${!!k==VM?'sel':''}" onclick="setVpdMode(${!!k})">${l}</button>`).join('');
-  $('targets').innerHTML=rangeInputs('day',cl.day,VM)+'<div style="height:10px"></div>'+rangeInputs('night',cl.night,VM);
-  $('tHyst').value=cl.tempHyst;$('hHyst').value=cl.humHyst;$('ventOn').value=cl.ventOn;$('ventEvery').value=cl.ventEvery;vpdHint()}
+  $('targets').innerHTML=rangeInputs('day',cl.day)+'<div style="height:10px"></div>'+rangeInputs('night',cl.night);
+  $('tHyst').value=cl.tempHyst;$('ventOn').value=cl.ventOn;$('ventEvery').value=cl.ventEvery;vpdHint()}
  const F=idx(['fan_out','fan_in']);
  if(dirty.has('clima'))refreshStates('F',fanStatus);
  else $('fans').innerHTML=F.length?F.map(([r,i])=>fanBlock(r,i)).join(''):'<div class="empty">No hay extractor/intractor asignado.</div>';
@@ -337,15 +332,15 @@ async function setFanMode(i,mode){C=await call('/api/config',{relays:relaysArr(i
  if(mode=='schedule'&&!C.relays[i].fan.windows.length)toast('Agregá las franjas y guardá');await refresh()}
 async function saveFw(i){const windows=[...$('fw'+i).querySelectorAll('tr')].map(tr=>{const q=k=>tr.querySelector(`[data-k=${k}]`);return {start:q('start').value,end:q('end').value,en:q('en').checked}});
  C=await call('/api/config',{relays:relaysArr(i,{fan:{windows}})},'Horario guardado');dirty.delete('clima');await refresh()}
-function readT(k){const g=n=>parseFloat($(k+n).value);return {tMin:g('tMin'),tMax:g('tMax'),hMin:g('hMin'),hMax:g('hMax'),vMin:g('vMin'),vMax:g('vMax')}}
-function vpdHint(){['day','night'].forEach(k=>{const t=readT(k),m=(t.tMin+t.tMax)/2;$(k+'Vpd').textContent=VM?`A ${m.toFixed(1)} °C equivale a humedad de ${rhFor(m,t.vMax).toFixed(0)} a ${rhFor(m,t.vMin).toFixed(0)} %`:`VPD resultante: ${vpd(t.tMin,t.hMax).toFixed(2)} a ${vpd(t.tMax,t.hMin).toFixed(2)} kPa`})}
+function readT(k){const g=n=>parseFloat($(k+n).value);return {tMin:g('tMin'),tMax:g('tMax'),vMin:g('vMin'),vMax:g('vMax')}}
+function vpdHint(){['day','night'].forEach(k=>{const t=readT(k),m=(t.tMin+t.tMax)/2;$(k+'Vpd').textContent=`A ${m.toFixed(1)} °C equivale a humedad de ${rhFor(m,t.vMax).toFixed(0)} a ${rhFor(m,t.vMin).toFixed(0)} %`})}
 function setStage(s){const st=STAGES[s];['day','night'].forEach(k=>Object.entries(st[k]).forEach(([n,v])=>$(k+n).value=v));vpdHint();
  document.querySelectorAll('#stages .chip').forEach(c=>c.classList.toggle('sel',c.textContent==s));toast('Rangos de '+s+' cargados, falta guardar')}
-async function saveClimate(){const tents=C.tents.map(()=>({}));tents[TENT]={climate:{day:readT('day'),night:readT('night'),vpdControl:VM,tempHyst:+$('tHyst').value,humHyst:+$('hHyst').value,ventOn:+$('ventOn').value,ventEvery:+$('ventEvery').value}};C=await call('/api/config',{tents},'Clima guardado');dirty.delete('clima');await refresh()}
+async function saveClimate(){const tents=C.tents.map(()=>({}));tents[TENT]={climate:{day:readT('day'),night:readT('night'),tempHyst:+$('tHyst').value,ventOn:+$('ventOn').value,ventEvery:+$('ventEvery').value}};C=await call('/api/config',{tents},'Clima guardado');dirty.delete('clima');await refresh()}
 async function setAux(i,type){C=await call('/api/config',{relays:relaysArr(i,{type})},'Salida asignada como '+TYPES[type]);await refresh()}
 
 function renderIrrig(){
- const I=idx(['irrigation']);renderSoil();if(dirty.has('riego'))return refreshStates('I',irrigStatus);
+ const I=idx(['irrigation']);renderTank();renderSoil();if(dirty.has('riego'))return refreshStates('I',irrigStatus);
  $('irrig').innerHTML=I.length?I.map(([r,i])=>{const ev=C.relays[i].events;
   return `<div class="card" id="I${i}"><div class="rhead"><h3><span class="dot ${r.on?'on':''}"></span>${esc(r.name)}</h3>${seg(i,r.mode)}</div>
   <div class="mut" data-st>${irrigStatus(r)}</div>
@@ -361,6 +356,23 @@ function renderIrrig(){
   :'<div class="card empty">No hay relés asignados a riego. Asignalos en Ajustes.</div>';
  I.forEach(([,i])=>evTotal(i));
 }
+// ---------- tanque ----------
+function renderTank(){const cfg=tentC().tank,st=tentS().tank;
+ $('tankPct').textContent=st&&st.valid?st.percent+' %':'';
+ $('tankLive').innerHTML=!cfg.enabled?'Opcional: con un sensor ultrasónico en la tapa te muestra cuánta agua queda, te avisa por Telegram y no deja prender la bomba en seco.':
+  !st||!st.valid?'<span class="bad">Sin lectura del sensor del tanque (ver docs/hardware.md).</span>':
+  `${st.liters} l de ${cfg.liters} l · el sensor mide ${st.cm} cm hasta el agua${st.low?' · <span class="bad">bomba bloqueada</span>':''}`;
+ if(dirty.has('riego'))return;
+ $('tankCfg').innerHTML=`<label style="display:flex;gap:8px;align-items:center;color:var(--fg);margin-top:10px"><input type="checkbox" id="tkEn" ${cfg.enabled?'checked':''} onchange="$('tkMore').hidden=!this.checked"> Tengo sensor de nivel en el tanque</label>
+ <div id="tkMore" ${cfg.enabled?'':'hidden'}><div class="row"><label>Distancia con el tanque vacío (cm)<input type="number" id="tkE" value="${cfg.emptyCm}"></label><label>Distancia con el tanque lleno (cm)<input type="number" id="tkF" value="${cfg.fullCm}"></label><label>Capacidad (litros)<input type="number" id="tkL" value="${cfg.liters}"></label></div>
+ <div class="row"><label>Avisarme debajo de (%)<input type="number" id="tkA" min="0" max="100" value="${cfg.alert}"></label><label>No prender la bomba debajo de (%)<input type="number" id="tkC" min="0" max="100" value="${cfg.cut}"></label></div>
+ <div class="mut">0 = no usar esa opción. Con el tanque lleno o vacío podés cargar la distancia con los botones. El sensor tiene que quedar al menos 25 cm por encima del agua llena.</div>
+ <div class="actions"><button class="btn sec" data-dirty onclick="tankCal('tkE')">Vacío = lectura actual</button><button class="btn sec" data-dirty onclick="tankCal('tkF')">Lleno = lectura actual</button></div></div>
+ <div class="actions"><button class="btn" onclick="saveTank()">Guardar</button></div>`}
+function tankCal(id){const st=tentS().tank;if(!st||!st.valid)return toast('No hay lectura del sensor',true);$(id).value=Math.round(+st.cm);toast('Cargado, falta guardar')}
+async function saveTank(){const tents=C.tents.map(()=>({}));tents[TENT]={tank:{enabled:$('tkEn').checked,emptyCm:+$('tkE').value,fullCm:+$('tkF').value,liters:+$('tkL').value,alert:+$('tkA').value,cut:+$('tkC').value}};
+ C=await call('/api/config',{tents},'Tanque guardado');dirty.delete('riego');await refresh()}
+
 // ---------- humedad de suelo ----------
 function soilOpts(i){const t=C.tents[C.relays[i].tent];if(!t.soil.enabled)return '';const o=C.relays[i].soil,on=o.skip||o.below;
  return `<details style="margin-top:10px" ${on?'open':''}><summary class="mut" style="cursor:pointer">🪴 Según humedad de suelo${on?'':' (apagado)'}</summary>
@@ -387,7 +399,8 @@ function irrigStatus(r){return (r.mode=='auto'?esc(r.reason):'Modo manual. Pasal
 function evRow(e){return `<tr><td><input type="time" value="${e.start}" data-k="start"></td><td><input type="number" min="1" max="3600" value="${e.dur}" data-k="dur" oninput="evTotal()"></td><td><input type="checkbox" ${e.en?'checked':''} data-k="en" onchange="evTotal()"></td><td><button class="btn sec sm" data-dirty onclick="this.closest('tr').remove();evTotal()">✕</button></td></tr>`}
 function readEv(i){return [...$('ev'+i).querySelectorAll('tr')].map(tr=>{const q=k=>tr.querySelector(`[data-k=${k}]`);return {start:q('start').value,dur:+q('dur').value,en:q('en').checked}})}
 function evTotal(i){if(i===undefined)return idx(['irrigation']).forEach(([,k])=>evTotal(k));const ev=readEv(i).filter(e=>e.en);$('tot'+i).textContent=ev.length+' riegos · '+dur(ev.reduce((a,e)=>a+e.dur,0))}
-function addEv(i){if($('ev'+i).children.length>=8)return toast('Máximo 8 riegos',true);$('ev'+i).insertAdjacentHTML('beforeend',evRow({start:'12:00',dur:60,en:true}));evTotal(i)}
+function addEv(i){if($('ev'+i).children.length>=8)return toast('Máximo 8 riegos',true);const ev=readEv(i),last=ev.length?ev[ev.length-1]:null;
+ $('ev'+i).insertAdjacentHTML('beforeend',evRow({start:last?hhmm(toMin(last.start)+60):'08:00',dur:last?last.dur:60,en:true}));evTotal(i)}
 function assist(i){const L=idx(['light']);let st=6*60,on=18*60;if(L.length){const l=C.relays[L[0][1]].light;st=toMin(l.start);on=l.on}
  const n=Math.max(1,Math.min(8,+$('an'+i).value)),d=+$('ad'+i).value,a=st+$('aa'+i).value*60,b=st+on-$('ab'+i).value*60;
  if(b<a)return toast('No entra en el horario de luz',true);

@@ -69,14 +69,12 @@ struct RelayConfig {
 
 struct ClimateTargets {
   float tempMin, tempMax;  // °C
-  float humMin, humMax;    // %HR
-  float vpdMin, vpdMax;    // kPa, usados con vpdControl
+  float vpdMin, vpdMax;    // kPa (de hoja): la humedad se maneja por VPD
 };
 
 struct ClimateConfig {
   ClimateTargets day, night;  // día = alguna luz encendida
-  float tempHyst, humHyst;
-  bool vpdControl;  // humidificador/deshumidificador (y coolers por humedad) siguen el VPD en vez del rango de humedad
+  float tempHyst;
   uint16_t ventOnMin, ventEveryMin;  // renovación de aire: extractor X min cada Y min (0 = desactivado)
 };
 
@@ -88,11 +86,22 @@ struct SoilConfig {
   uint16_t wet;   // lectura en un vaso de agua (100 %)
 };
 
+// Tanque de riego con sensor ultrasónico en la tapa (opcional).
+struct TankConfig {
+  bool enabled;
+  uint16_t emptyCm;  // distancia del sensor al agua con el tanque vacío (al fondo)
+  uint16_t fullCm;   // distancia del sensor al agua con el tanque lleno
+  uint16_t liters;   // capacidad, para mostrar litros
+  uint8_t alertPct;  // avisar por Telegram debajo de esto (0 = no)
+  uint8_t cutPct;    // no prender la bomba debajo de esto (0 = no)
+};
+
 struct TentConfig {
   char name[24];
   bool enabled;
   ClimateConfig climate;
   SoilConfig soil;
+  TankConfig tank;
 };
 
 struct Settings {

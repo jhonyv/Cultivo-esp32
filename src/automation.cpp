@@ -4,6 +4,7 @@
 #include "sensors.h"
 #include "settings.h"
 #include "soil.h"
+#include "tank.h"
 
 static const char* reasons[NUM_RELAYS];
 static uint32_t nextLightChange[NUM_RELAYS];
@@ -93,14 +94,9 @@ static void updateClimate(time_t now, bool clockOk) {
     if (c.valid) {
       hysteresis(hot[t], c.temperature > tg.tempMax, c.temperature < tg.tempMax - cfg.tempHyst);
       hysteresis(cold[t], c.temperature < tg.tempMin, c.temperature > tg.tempMin + cfg.tempHyst);
-      if (cfg.vpdControl) {
-        // VPD bajo = aire muy húmedo para esa temperatura; VPD alto = aire muy seco.
-        hysteresis(humHigh[t], c.vpd < tg.vpdMin, c.vpd > tg.vpdMin + VPD_HYST);
-        hysteresis(humLow[t], c.vpd > tg.vpdMax, c.vpd < tg.vpdMax - VPD_HYST);
-      } else {
-        hysteresis(humHigh[t], c.humidity > tg.humMax, c.humidity < tg.humMax - cfg.humHyst);
-        hysteresis(humLow[t], c.humidity < tg.humMin, c.humidity > tg.humMin + cfg.humHyst);
-      }
+      // La humedad se maneja por VPD: bajo = aire muy húmedo para esa temperatura, alto = muy seco.
+      hysteresis(humHigh[t], c.vpd < tg.vpdMin, c.vpd > tg.vpdMin + VPD_HYST);
+      hysteresis(humLow[t], c.vpd > tg.vpdMax, c.vpd < tg.vpdMax - VPD_HYST);
     }
     if (cfg.ventOnMin && cfg.ventEveryMin) {
       uint32_t minutes = clockOk ? now / 60 : millis() / 60000;
@@ -113,7 +109,6 @@ static void updateClimate(time_t now, bool clockOk) {
     const char* why = nullptr;
     uint8_t t = settings.relays[i].tent;
     const Climate& c = climate(t);
-    bool vpdMode = settings.tents[t].climate.vpdControl;
     switch (settings.relays[i].type) {
       case RelayType::FanOut:
       case RelayType::FanIn:
@@ -123,17 +118,17 @@ static void updateClimate(time_t now, bool clockOk) {
           why = !clockOk ? "sin hora: ventilando" : on ? "horario: prendido" : "horario: apagado";
         } else if (!c.valid) on = true, why = "sin sensor: ventilando";
         else if (hot[t]) on = true, why = "temperatura alta";
-        else if (humHigh[t]) on = true, why = vpdMode ? "VPD bajo (humedad alta)" : "humedad alta";
+        else if (humHigh[t]) on = true, why = "VPD bajo (humedad alta)";
         else if (vent[t]) on = true, why = "renovación de aire";
         else why = "clima en rango";
         break;
       case RelayType::Humidifier:
         on = c.valid && humLow[t];
-        why = !c.valid ? "sin sensor" : on ? (vpdMode ? "VPD alto (aire seco)" : "humedad baja") : (vpdMode ? "VPD en rango" : "humedad en rango");
+        why = !c.valid ? "sin sensor" : on ? "VPD alto (aire seco)" : "VPD en rango";
         break;
       case RelayType::Dehumidifier:
         on = c.valid && humHigh[t];
-        why = !c.valid ? "sin sensor" : on ? (vpdMode ? "VPD bajo (aire húmedo)" : "humedad alta") : (vpdMode ? "VPD en rango" : "humedad en rango");
+        why = !c.valid ? "sin sensor" : on ? "VPD bajo (aire húmedo)" : "VPD en rango";
         break;
       case RelayType::AirConditioner:  // normalmente en la sala: el intractor mete ese aire frío a la carpa
         on = c.valid && hot[t];
@@ -172,6 +167,13 @@ static void updateIrrigation(time_t now, bool clockOk) {
       if (skipEvent[i]) Serial.printf("[riego] %s: tierra al %.0f %%, riego salteado\n", r.name, s.percent);
     }
     bool on = ev >= 0 && !skipEvent[i];
+    // Tanque casi vacío: la bomba no prende (ni por horario, ni extra, ni "Regar ahora").
+    if (tankLow(r.tent)) {
+      relaySetAuto(i, false);
+      if (relayPulseRemaining(i)) relayPulse(i, 0);
+      reasons[i] = "tanque casi vacío: bomba bloqueada";
+      continue;
+    }
     relaySetAuto(i, on);
 
     // Riego extra cuando la tierra se seca, solo en Auto, con luces prendidas y respetando el tope diario.

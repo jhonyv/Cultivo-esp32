@@ -28,7 +28,7 @@ Si el WiFi falla, la red `Cultivo-XXXX` vuelve a aparecer para reconfigurarlo. M
 
 - **Inicio:** temperatura, humedad y VPD contra los objetivos, día/noche, gráfico de las últimas 24 h y control rápido de cada relé (Off / Auto / On).
 - **Iluminación:** un horario para todas las luces de la carpa (cada luz con su Off / Auto / On): 12/12, 16/8, 18/6, 20/4 o personalizado (horas prendida/apagada libres, por ej. 13/13) y hora de encendido.
-- **Temperatura y humedad:** rangos de día y de noche (con presets por etapa); la humedad se controla por rango de % o directo por **VPD objetivo**; histéresis y renovación de aire. Cada extractor/intractor trabaja **por clima** (prende si hace calor, si hay humedad de más o en la renovación), **por horario** (franjas) o **permanente** (24/7); las salidas asignables pueden ser humidificador, deshumidificador, calefactor o aire acondicionado (prende con calor junto con los coolers; pensado para el aire de la sala).
+- **Temperatura y humedad:** rangos de día y de noche (con presets por etapa); la humedad se controla por **VPD objetivo** (humidificador/deshumidificador), la temperatura con aire acondicionado/calefactor; histéresis y renovación de aire. Cada extractor/intractor trabaja **por clima** (prende si hace calor, si hay humedad de más o en la renovación), **por horario** (franjas) o **permanente** (24/7); las salidas asignables pueden ser humidificador, deshumidificador, calefactor o aire acondicionado (prende con calor junto con los coolers; pensado para el aire de la sala).
 - **Riego:** hasta 8 riegos por salida (hora + segundos), asistente que los reparte en el horario de luz, “Regar ahora” y una guía rápida.
 - **Historial:** día (cada 5 min), semana (por hora) y mes (por día) con temperatura, humedad y VPD (promedio y mín–máx), más horas de luz, coolers y tiempo de riego por día. Semana y mes se guardan en la flash y sobreviven cortes de luz (35 días).
 - **Ajustes:** WiFi, nombres y función de cada relé, polaridad del módulo, offset de hoja, clave del AP y zona horaria.
@@ -38,6 +38,10 @@ En modo **Auto** cada relé sigue su automatización; On/Off lo fuerza a mano. S
 La página está en `web/index.html`; al compilar, `tools/embed_web.py` la comprime y la mete en el firmware.
 
 La configuración (nombres, tipos y modo de cada relé, offset de hoja para el VPD, clave del AP, zona horaria) queda guardada en la memoria flash y sobrevive a cortes de luz. Los relés arrancan siempre apagados hasta leer la config.
+
+## Nivel del tanque (opcional)
+
+Con un ultrasónico JSN-SR04T en la tapa del tanque, la página muestra el % y los litros, avisa por Telegram si baja de lo que elijas y puede bloquear la bomba para que no trabaje en seco. Cableado en [docs/hardware.md](docs/hardware.md#nivel-del-tanque-opcional).
 
 ## Riego según humedad de suelo (opcional)
 

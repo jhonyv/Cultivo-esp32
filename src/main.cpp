@@ -11,6 +11,7 @@
 #include "sensors.h"
 #include "settings.h"
 #include "soil.h"
+#include "tank.h"
 #include "telegram.h"
 #include "web.h"
 
@@ -27,6 +28,7 @@ void setup() {
   historyBegin();
   sensorsBegin();
   soilBegin();
+  tankBegin();
 
   netBegin();
   webBegin();
@@ -39,6 +41,7 @@ void loop() {
   webLoop();
   sensorsLoop();
   soilLoop();
+  tankLoop();
   clockLoop();
   historyLoop();
   automationLoop();
