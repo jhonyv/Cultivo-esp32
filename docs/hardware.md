@@ -30,10 +30,10 @@ Opcional para más adelante: humidificador ultrasónico, deshumidificador, senso
 | Relé 2 – Luz 2 | 17 | |
 | Relé 3 – Extractor (cooler out) | 18 | |
 | Relé 4 – Intractor (cooler in) | 19 | |
-| Relé 5 – Riego 1 | 23 | |
-| Relé 6 – Riego 2 | 25 | |
-| Relé 7 – Asignable 1 | 26 | |
-| Relé 8 – Asignable 2 | 27 | |
+| Relé 5 – Riego (bomba) | 23 | |
+| Relé 6 – Asignable 1 | 25 | |
+| Relé 7 – Asignable 2 | 26 | |
+| Relé 8 – Asignable 3 | 27 | |
 | I2C SDA (SHT carpa 1 + DS3231 + PCF8574) | 21 | Bus principal |
 | I2C SCL (SHT carpa 1 + DS3231 + PCF8574) | 22 | Bus principal |
 | I2C2 SDA (SHT carpa 2) | 32 | Segundo bus, solo si usás la carpa 2 |

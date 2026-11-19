@@ -75,17 +75,18 @@ canvas{width:100%;height:190px;display:block}
 </section>
 
 <section id="luz"><h2>💡 Iluminación</h2><div id="lights"></div>
-<div class="tip">El horario sigue funcionando sin WiFi gracias al reloj DS3231. Un ciclo personalizado que no suma 24 h (por ej. 13/13) arranca hoy a la hora de encendido y después corre solo.</div></section>
+<div class="tip">Todas las luces de la carpa siguen el mismo horario; cada una tiene su Off / Auto / On por si querés apagar o prender una a mano. El horario sigue funcionando sin WiFi gracias al reloj DS3231. Un ciclo personalizado que no suma 24 h (por ej. 13/13) arranca hoy a la hora de encendido y después corre solo.</div></section>
 
 <section id="clima"><h2>🌡️ Temperatura y humedad</h2>
 <div class="card"><h3>Etapa</h3><div class="mut">Carga rangos sugeridos; después los podés ajustar.</div><div class="chips" id="stages"></div></div>
 <div class="card" id="targets"></div>
-<div class="card"><h3>Ajuste fino</h3>
-<div class="row"><label>Histéresis temp. (°C)<input id="tHyst" type="number" step="0.1"></label><label>Histéresis hum. (%)<input id="hHyst" type="number" step="0.5"></label></div>
-<div class="row"><label>Renovación: extractor (min)<input id="ventOn" type="number" min="0"></label><label>cada (min)<input id="ventEvery" type="number" min="0"></label></div>
-<div class="mut">La renovación prende el extractor aunque el clima esté en rango, para cambiar el aire (CO₂). 0 la desactiva.</div></div>
+<div class="card"><h3>Ajuste fino</h3><div class="mut">Si no sabés qué poner, dejalo como viene.</div>
+<div class="row"><label>Margen de temperatura (°C)<input id="tHyst" type="number" step="0.1"></label><label>Margen de humedad (%)<input id="hHyst" type="number" step="0.5"></label></div>
+<div class="mut">Es cuánto tiene que volver el valor antes de apagar, para que los equipos no prendan y apaguen a cada rato cuando están justo en el límite (lo que en la jerga se llama <i>histéresis</i>). Ejemplo: máximo 28 °C y margen 0,5: el extractor prende al pasar los 28 °C y se apaga recién cuando baja de 27,5 °C. Con la humedad es igual: máximo 70 % y margen 3, prende arriba de 70 % y apaga debajo de 67 %.</div>
+<div class="row"><label>Renovación de aire: prender el extractor (min)<input id="ventOn" type="number" min="0"></label><label>cada (min)<input id="ventEvery" type="number" min="0"></label></div>
+<div class="mut">Aunque la temperatura y la humedad estén bien, las plantas consumen el CO₂ del aire: la renovación prende el extractor un rato cada tanto para meter aire nuevo. Ejemplo: 5 cada 30 = 5 minutos de extractor cada media hora. 0 la desactiva.</div></div>
 <div class="card"><h3 style="margin-bottom:6px">Ventilación</h3><div id="fans"></div></div>
-<div class="card"><h3>Salidas asignables</h3><div class="mut" style="margin-bottom:6px">Asignales humidificador, deshumidificador o calefactor y quedan atadas a los rangos de arriba.</div><div id="aux"></div></div>
+<div class="card"><h3>Salidas asignables</h3><div class="mut" style="margin-bottom:6px">Asignales humidificador, deshumidificador, calefactor o aire acondicionado y quedan atadas a los rangos de arriba. Con aire acondicionado, los coolers ya no prenden por calor (para no sacar el aire frío), solo por humedad o renovación.</div><div id="aux"></div></div>
 <div class="actions"><button class="btn" onclick="saveClimate()">Guardar clima</button></div></section>
 
 <section id="riego"><h2>💧 Riego</h2>
@@ -156,8 +157,8 @@ canvas{width:100%;height:190px;display:block}
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
-const TYPES={generic:'Sin asignar',light:'Luz',fan_out:'Extractor',fan_in:'Intractor',irrigation:'Riego',humidifier:'Humidificador',dehumidifier:'Deshumidificador',heater:'Calefactor'};
-const AUX=['generic','humidifier','dehumidifier','heater'];
+const TYPES={generic:'Sin asignar',light:'Luz',fan_out:'Extractor',fan_in:'Intractor',irrigation:'Riego',humidifier:'Humidificador',dehumidifier:'Deshumidificador',heater:'Calefactor',ac:'Aire acondicionado'};
+const AUX=['generic','humidifier','dehumidifier','heater','ac'];
 const MODES=[['off','Off'],['auto','Auto'],['on','On']];
 const SECTIONS=[['inicio','🏠','Inicio'],['luz','💡','Iluminación'],['clima','🌡️','Temperatura y humedad'],['riego','💧','Riego'],['historial','📈','Historial'],['ajustes','⚙️','Ajustes']];
 const LIGHT_PRESETS=[[12,12],[16,8],[18,6],[20,4]];
@@ -277,24 +278,26 @@ function renderHome(){
 
 function renderLights(){
  const L=idx(['light']);if(dirty.has('luz'))return refreshStates('L',lightStatus);
- $('lights').innerHTML=L.length?L.map(([r,i])=>{const l=C.relays[i].light;const pre=LIGHT_PRESETS.find(([a,b])=>a*60==l.on&&b*60==l.off);
-  return `<div class="card" id="L${i}"><div class="rhead"><h3><span class="dot ${r.on?'on':''}"></span>${esc(r.name)}</h3>${seg(i,r.mode)}</div>
-  <div class="mut" data-st>${lightStatus(r)}</div>
-  <div class="chips">${LIGHT_PRESETS.map(([a,b])=>`<button class="chip ${pre&&pre[0]==a?'sel':''}" onclick="lightPreset(${i},${a},${b})">${a}/${b}</button>`).join('')}<button class="chip ${pre?'':'sel'}" onclick="lightPreset(${i})">Personalizado</button></div>
-  <div class="row"><label>Enciende a las<input type="time" id="ls${i}" value="${l.start}" oninput="lightSum(${i})"></label>
-  <label>Horas encendida<input type="number" step="0.25" min="0.25" id="lon${i}" value="${l.on/60}" ${pre?'disabled':''} oninput="lightSum(${i})"></label>
-  <label>Horas apagada<input type="number" step="0.25" min="0" id="loff${i}" value="${l.off/60}" ${pre?'disabled':''} oninput="lightSum(${i})"></label></div>
-  <div class="mut" id="lsum${i}"></div><div class="actions"><button class="btn" onclick="saveLight(${i})">Guardar horario</button></div></div>`}).join('')
-  :'<div class="card empty">No hay relés asignados a luz. Asignalos en Ajustes.</div>';
- L.forEach(([,i])=>lightSum(i));
+ if(!L.length){$('lights').innerHTML='<div class="card empty">No hay relés asignados a luz en esta carpa. Asignalos en Ajustes.</div>';return}
+ const l=C.relays[L[0][1]].light,pre=LIGHT_PRESETS.find(([a,b])=>a*60==l.on&&b*60==l.off);
+ $('lights').innerHTML=`<div class="card" id="LS"><h3>Horario de las luces</h3>
+  <div class="chips">${LIGHT_PRESETS.map(([a,b])=>`<button class="chip ${pre&&pre[0]==a?'sel':''}" onclick="lightPreset(${a},${b})">${a}/${b}</button>`).join('')}<button class="chip ${pre?'':'sel'}" onclick="lightPreset()">Personalizado</button></div>
+  <div class="row"><label>Enciende a las<input type="time" id="ls" value="${l.start}" oninput="lightSum()"></label>
+  <label>Horas encendida<input type="number" step="0.25" min="0.25" id="lon" value="${l.on/60}" ${pre?'disabled':''} oninput="lightSum()"></label>
+  <label>Horas apagada<input type="number" step="0.25" min="0" id="loff" value="${l.off/60}" ${pre?'disabled':''} oninput="lightSum()"></label></div>
+  <div class="mut" id="lsum"></div><div class="actions"><button class="btn" onclick="saveLight()">Guardar horario</button></div>
+  <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:4px">${L.map(([r,i])=>`<div class="relay" id="L${i}"><div><span class="dot ${r.on?'on':''}"></span><b>${esc(r.name)}</b><div class="mut" style="margin-left:19px" data-st>${lightStatus(r)}</div></div>${seg(i,r.mode)}</div>`).join('')}</div></div>`;
+ lightSum();
 }
-function lightStatus(r){return r.mode=='auto'?esc(r.reason)+(r.next?' · cambia en '+dur(r.next):''):'Modo manual. Pasalo a Auto para que siga el horario.'}
-function lightPreset(i,a,b){const on=$('lon'+i),off=$('loff'+i);if(a){on.value=a;off.value=b}on.disabled=off.disabled=!!a;
- $('L'+i).querySelectorAll('.chip').forEach(c=>c.classList.toggle('sel',a?c.textContent==a+'/'+b:c.textContent=='Personalizado'));lightSum(i)}
-function lightSum(i){const on=Math.round(+$('lon'+i).value*60),off=Math.round(+$('loff'+i).value*60),st=toMin($('ls'+i).value||'00:00');
- $('lsum'+i).textContent=on+off==1440?`Prende ${hhmm(st)} y apaga ${hhmm(st+on)} todos los días.`:`Ciclo de ${hrs(on+off)} h: ${hrs(on)} h prendida y ${hrs(off)} h apagada, arrancando hoy ${hhmm(st)}. El horario se va corriendo cada día.`}
-async function saveLight(i){const on=Math.round(+$('lon'+i).value*60),off=Math.round(+$('loff'+i).value*60);
- C=await call('/api/config',{relays:relaysArr(i,{light:{on,off,start:$('ls'+i).value}})},'Horario guardado');dirty.delete('luz');await refresh()}
+function lightStatus(r){return r.mode=='auto'?esc(r.reason)+(r.next?' · cambia en '+dur(r.next):''):r.mode=='on'?'Manual: prendida (no sigue el horario)':'Manual: apagada (no sigue el horario)'}
+function lightPreset(a,b){const on=$('lon'),off=$('loff');if(a){on.value=a;off.value=b}on.disabled=off.disabled=!!a;
+ $('LS').querySelectorAll('.chip').forEach(c=>c.classList.toggle('sel',a?c.textContent==a+'/'+b:c.textContent=='Personalizado'));lightSum()}
+function lightSum(){const on=Math.round(+$('lon').value*60),off=Math.round(+$('loff').value*60),st=toMin($('ls').value||'00:00');
+ $('lsum').textContent=on+off==1440?`Prende ${hhmm(st)} y apaga ${hhmm(st+on)} todos los días.`:`Ciclo de ${hrs(on+off)} h: ${hrs(on)} h prendida y ${hrs(off)} h apagada, arrancando hoy ${hhmm(st)}. El horario se va corriendo cada día.`}
+// El mismo horario va a todas las luces de la carpa.
+async function saveLight(){const on=Math.round(+$('lon').value*60),off=Math.round(+$('loff').value*60),light={on,off,start:$('ls').value};
+ const relays=C.relays.map(()=>({}));idx(['light']).forEach(([,i])=>relays[i]={light});
+ C=await call('/api/config',{relays},'Horario guardado');dirty.delete('luz');await refresh()}
 
 function rangeInputs(k,t){return `<div><b>${k=='day'?'☀️ Día (luces prendidas)':'🌙 Noche'}</b><div class="row">
  <label>Temp. mín (°C)<input type="number" step="0.5" id="${k}tMin" value="${t.tMin}" oninput="vpdHint()"></label><label>Temp. máx (°C)<input type="number" step="0.5" id="${k}tMax" value="${t.tMax}" oninput="vpdHint()"></label>

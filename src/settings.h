@@ -13,6 +13,7 @@ enum class RelayType : uint8_t {
   Humidifier,
   Dehumidifier,
   Heater,
+  AirConditioner,  // se prende con temperatura alta
 };
 
 enum class RelayMode : uint8_t { Off, On, Auto };

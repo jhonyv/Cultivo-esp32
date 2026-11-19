@@ -1,6 +1,6 @@
 # Cultivo-esp32
 
-Controlador de carpa de cultivo con ESP32: 8 relés (luces, extractor/intractor, riego y 2 asignables), sensor SHT40/SHT31 de temperatura y humedad con cálculo de VPD, reloj DS3231 de respaldo y panel web.
+Controlador de carpa de cultivo con ESP32: 8 relés (luces, extractor/intractor, riego y 3 asignables), sensor SHT40/SHT31 de temperatura y humedad con cálculo de VPD, reloj DS3231 de respaldo y panel web.
 
 Se amplía a **2 carpas y 16 relés** sumando un PCF8574 y un segundo módulo de relés, con hasta 2 sensores SHT por carpa (promediados). La página tiene un selector Carpa 1 / Carpa 2 y cada carpa lleva su clima, horarios, alertas e historial. Ver [docs/hardware.md](docs/hardware.md).
 
@@ -27,13 +27,13 @@ Si el WiFi falla, la red `Cultivo-XXXX` vuelve a aparecer para reconfigurarlo. M
 ## Panel web
 
 - **Inicio:** temperatura, humedad y VPD contra los objetivos, día/noche, gráfico de las últimas 24 h y control rápido de cada relé (Off / Auto / On).
-- **Iluminación:** horario por cada relé de luz: 12/12, 16/8, 18/6, 20/4 o personalizado (horas prendida/apagada libres, por ej. 13/13) y hora de encendido.
-- **Temperatura y humedad:** rangos de día y de noche (con presets por etapa), histéresis y renovación de aire. Extractor e intractor prenden si hace calor, si hay humedad de más o en la renovación; las salidas asignables pueden ser humidificador, deshumidificador o calefactor.
+- **Iluminación:** un horario para todas las luces de la carpa (cada luz con su Off / Auto / On): 12/12, 16/8, 18/6, 20/4 o personalizado (horas prendida/apagada libres, por ej. 13/13) y hora de encendido.
+- **Temperatura y humedad:** rangos de día y de noche (con presets por etapa), histéresis y renovación de aire. Extractor e intractor prenden si hace calor, si hay humedad de más o en la renovación; las salidas asignables pueden ser humidificador, deshumidificador, calefactor o aire acondicionado (con aire, los coolers dejan de prender por calor).
 - **Riego:** hasta 8 riegos por salida (hora + segundos), asistente que los reparte en el horario de luz, “Regar ahora” y una guía rápida.
 - **Historial:** día (cada 5 min), semana (por hora) y mes (por día) con temperatura, humedad y VPD (promedio y mín–máx), más horas de luz, coolers y tiempo de riego por día. Semana y mes se guardan en la flash y sobreviven cortes de luz (35 días).
 - **Ajustes:** WiFi, nombres y función de cada relé, polaridad del módulo, offset de hoja, clave del AP y zona horaria.
 
-En modo **Auto** cada relé sigue su automatización; On/Off lo fuerza a mano. Si el sensor falla, los coolers quedan prendidos y humidificador/deshumidificador/calefactor apagados. Sin hora válida, luces y riego en Auto quedan apagados.
+En modo **Auto** cada relé sigue su automatización; On/Off lo fuerza a mano. Si el sensor falla, los coolers quedan prendidos y humidificador/deshumidificador/calefactor/aire apagados. Sin hora válida, luces y riego en Auto quedan apagados.
 
 La página está en `web/index.html`; al compilar, `tools/embed_web.py` la comprime y la mete en el firmware.
 

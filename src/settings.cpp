@@ -5,7 +5,7 @@
 Settings settings;
 
 static const char* const TYPE_NAMES[] = {
-    "generic", "light", "fan_in", "fan_out", "irrigation", "humidifier", "dehumidifier", "heater",
+    "generic", "light", "fan_in", "fan_out", "irrigation", "humidifier", "dehumidifier", "heater", "ac",
 };
 static const char* const MODE_NAMES[] = {"off", "on", "auto"};
 
@@ -70,17 +70,17 @@ static void setRelay(uint8_t i, const char* name, RelayType type) {
 }
 
 static void settingsDefaults() {
-  // Cada carpa arranca con la misma distribución: 2 luces, extractor, intractor, 2 riegos y 2 asignables.
+  // Cada carpa arranca con la misma distribución: 2 luces, extractor, intractor, riego (una bomba) y 3 asignables.
   for (uint8_t t = 0; t < NUM_TENTS; t++) {
     uint8_t b = t * 8;
     setRelay(b + 0, "Luz 1", RelayType::Light);
     setRelay(b + 1, "Luz 2", RelayType::Light);
     setRelay(b + 2, "Extractor", RelayType::FanOut);
     setRelay(b + 3, "Intractor", RelayType::FanIn);
-    setRelay(b + 4, "Riego 1", RelayType::Irrigation);
-    setRelay(b + 5, "Riego 2", RelayType::Irrigation);
-    setRelay(b + 6, "Asignable 1", RelayType::Generic);
-    setRelay(b + 7, "Asignable 2", RelayType::Generic);
+    setRelay(b + 4, "Riego", RelayType::Irrigation);
+    setRelay(b + 5, "Asignable 1", RelayType::Generic);
+    setRelay(b + 6, "Asignable 2", RelayType::Generic);
+    setRelay(b + 7, "Asignable 3", RelayType::Generic);
 
     TentConfig& tc = settings.tents[t];
     snprintf(tc.name, sizeof(tc.name), "Carpa %u", t + 1);
