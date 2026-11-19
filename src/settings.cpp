@@ -66,6 +66,7 @@ static void setRelay(uint8_t i, const char* name, RelayType type) {
   r.mode = RelayMode::Off;
   r.light = {18 * 60, 6 * 60, anchorFromStart(6 * 60)};
   r.eventCount = 0;
+  r.soil = {0, 0, 60, 3};
 }
 
 static void settingsDefaults() {
@@ -90,6 +91,7 @@ static void settingsDefaults() {
     tc.climate.humHyst = 3.0f;
     tc.climate.ventOnMin = 5;
     tc.climate.ventEveryMin = 30;
+    tc.soil = {false, 3, 21000, 9500};  // valores típicos de un capacitivo v1.2 a 3,3 V
   }
   settings.relayActiveLow = true;
   settings.leafOffset = -2.0f;
@@ -185,6 +187,41 @@ static bool eventsFromJson(JsonArrayConst arr, RelayConfig& r, String& error) {
   return true;
 }
 
+static void soilToJson(const SoilConfig& c, JsonObject o) {
+  o["enabled"] = c.enabled;
+  o["count"] = c.count;
+  o["dry"] = c.dry;
+  o["wet"] = c.wet;
+}
+
+static bool soilFromJson(JsonObjectConst o, SoilConfig& c, String& error) {
+  if (o.isNull()) return true;
+  if (o["enabled"].is<bool>()) c.enabled = o["enabled"];
+  if (o["count"].is<int>()) c.count = constrain(o["count"].as<int>(), 1, SOIL_SENSORS_MAX);
+  if (o["dry"].is<int>()) c.dry = constrain(o["dry"].as<int>(), 0, 32767);
+  if (o["wet"].is<int>()) c.wet = constrain(o["wet"].as<int>(), 0, 32767);
+  if (c.dry <= c.wet) {
+    error = "Suelo: la lectura en seco tiene que ser mayor que la mojada";
+    return false;
+  }
+  return true;
+}
+
+static void irrigationSoilToJson(const IrrigationSoil& s, JsonObject o) {
+  o["skip"] = s.skipAbove;
+  o["below"] = s.waterBelow;
+  o["dur"] = s.durSec;
+  o["max"] = s.maxPerDay;
+}
+
+static void irrigationSoilFromJson(JsonObjectConst o, IrrigationSoil& s) {
+  if (o.isNull()) return;
+  if (o["skip"].is<int>()) s.skipAbove = constrain(o["skip"].as<int>(), 0, 100);
+  if (o["below"].is<int>()) s.waterBelow = constrain(o["below"].as<int>(), 0, 100);
+  if (o["dur"].is<int>()) s.durSec = constrain(o["dur"].as<int>(), 1, 3600);
+  if (o["max"].is<int>()) s.maxPerDay = constrain(o["max"].as<int>(), 1, 12);
+}
+
 static void climateToJson(const ClimateConfig& cfg, JsonObject c) {
   targetsToJson(cfg.day, c["day"].to<JsonObject>());
   targetsToJson(cfg.night, c["night"].to<JsonObject>());
@@ -242,6 +279,7 @@ void settingsToJson(JsonObject obj, bool secrets) {
       o["dur"] = x.durSec;
       o["en"] = x.enabled;
     }
+    irrigationSoilToJson(settings.relays[i].soil, r["soil"].to<JsonObject>());
   }
   JsonArray tents = obj["tents"].to<JsonArray>();
   for (uint8_t t = 0; t < NUM_TENTS; t++) {
@@ -249,6 +287,7 @@ void settingsToJson(JsonObject obj, bool secrets) {
     o["name"] = settings.tents[t].name;
     o["enabled"] = settings.tents[t].enabled;
     climateToJson(settings.tents[t].climate, o["climate"].to<JsonObject>());
+    soilToJson(settings.tents[t].soil, o["soil"].to<JsonObject>());
   }
 }
 
@@ -310,6 +349,7 @@ bool settingsFromJson(JsonObjectConst obj, String& error) {
       error = String("Relé ") + (i + 1) + ": " + error;
       return false;
     }
+    irrigationSoilFromJson(r["soil"], s.relays[i].soil);
   }
 
   // Config de antes de las 2 carpas: "climate" suelto es el de la carpa 1.
@@ -319,7 +359,7 @@ bool settingsFromJson(JsonObjectConst obj, String& error) {
     JsonObjectConst o = tents[t];
     if (o["name"].is<const char*>()) strlcpy(s.tents[t].name, o["name"], sizeof(s.tents[t].name));
     if (o["enabled"].is<bool>()) s.tents[t].enabled = o["enabled"];
-    if (!climateFromJson(o["climate"], s.tents[t].climate, error)) {
+    if (!climateFromJson(o["climate"], s.tents[t].climate, error) || !soilFromJson(o["soil"], s.tents[t].soil, error)) {
       error = String(s.tents[t].name) + ": " + error;
       return false;
     }

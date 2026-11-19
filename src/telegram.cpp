@@ -8,6 +8,7 @@
 #include "relays.h"
 #include "sensors.h"
 #include "settings.h"
+#include "soil.h"
 
 struct Command {
   uint8_t relay;
@@ -28,13 +29,14 @@ struct Alert {
   bool sent;
 };
 
-static const uint8_t NUM_ALERTS = 5;
+static const uint8_t NUM_ALERTS = 6;
 static const Alert ALERT_TEXTS[NUM_ALERTS] = {
     {"🔥 Temperatura alta", "✅ Temperatura normal otra vez", 0, false},
     {"🥶 Temperatura baja", "✅ Temperatura normal otra vez", 0, false},
     {"💦 Humedad muy alta", "✅ Humedad normal otra vez", 0, false},
     {"🏜️ Humedad muy baja", "✅ Humedad normal otra vez", 0, false},
     {"⚠️ Los sensores de temperatura/humedad no responden", "✅ Los sensores volvieron a responder", 0, false},
+    {"⚠️ Los sensores de suelo no responden", "✅ Los sensores de suelo volvieron a responder", 0, false},
 };
 static Alert alerts[NUM_TENTS][NUM_ALERTS];
 
@@ -72,6 +74,11 @@ static String statusText() {
       s += "🌡 " + String(c.temperature, 1) + " °C   💧 " + String(c.humidity, 0) + " %   VPD " + String(c.vpd, 2) + " kPa\n";
     } else {
       s += "⚠️ Sin lectura de los sensores\n";
+    }
+    if (settings.tents[t].soil.enabled) {
+      const SoilReading& so = soil(t);
+      if (so.valid) s += "🪴 Suelo " + String(so.percent, 0) + " %\n";
+      else s += "⚠️ Sin lectura de suelo\n";
     }
     for (uint8_t i = 0; i < NUM_RELAYS; i++) {
       const RelayConfig& r = settings.relays[i];
@@ -193,6 +200,7 @@ static void checkAlerts() {
         c.valid && c.humidity > t.humMax + 10,
         c.valid && c.humidity < t.humMin - 10,
         !c.valid,
+        settings.tents[tent].soil.enabled && !soil(tent).valid,
     };
     String prefix = String(settings.tents[tent].name) + ": ";
     for (uint8_t i = 0; i < NUM_ALERTS; i++) {

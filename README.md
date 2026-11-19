@@ -39,6 +39,10 @@ La página está en `web/index.html`; al compilar, `tools/embed_web.py` la compr
 
 La configuración (nombres, tipos y modo de cada relé, offset de hoja para el VPD, clave del AP, zona horaria) queda guardada en la memoria flash y sobrevive a cortes de luz. Los relés arrancan siempre apagados hasta leer la config.
 
+## Riego según humedad de suelo (opcional)
+
+Con un ADS1115 y 2 a 4 sensores capacitivos por carpa, el riego por horario puede **saltearse** si la tierra todavía está húmeda y hacer **riegos extra** si se seca (con tope diario). Se activa y calibra en Riego > Humedad de suelo; la humedad de suelo también queda en el historial y en `/estado` de Telegram. Cableado en [docs/hardware.md](docs/hardware.md#humedad-de-suelo-opcional).
+
 ## Sin internet o sin router
 
 Todo lo que es automático (luces, clima, riego, historial) corre en el ESP32 y no necesita internet; la hora la mantiene el DS3231.

@@ -98,6 +98,7 @@ canvas{width:100%;height:190px;display:block}
 <li><b>Tierra/sustrato:</b> 1-2 riegos por día buscando ~10-20 % de drenaje. <b>Coco:</b> 3-6 pulsos chicos por día.</li>
 <li>Empezá corto, mirá el peso de la maceta y el drenaje, y subí de a poco. Para más adelante se puede sumar un sensor de humedad de suelo o de nivel del tanque.</li>
 </ul></details>
+<div class="card" id="soilCard"><div class="rhead"><h3>🪴 Humedad de suelo</h3><span class="big" id="soilPct" style="font-size:1.35rem"></span></div><div class="mut" id="soilLive" style="margin-top:4px"></div><div id="soilCfg"></div></div>
 <div id="irrig"></div></section>
 
 <section id="historial"><h2>📈 Historial</h2>
@@ -106,6 +107,7 @@ canvas{width:100%;height:190px;display:block}
 <div class="card"><h3>Temperatura (°C)</h3><canvas class="hc" id="hcT"></canvas><div class="legend" id="hlT"></div></div>
 <div class="card"><h3>Humedad (%)</h3><canvas class="hc" id="hcH"></canvas></div>
 <div class="card"><h3>VPD (kPa)</h3><canvas class="hc" id="hcV"></canvas></div>
+<div class="card" id="hSoil" hidden><h3>Humedad de suelo (%)</h3><canvas class="hc" id="hcS"></canvas></div>
 <div class="card"><h3>Por día</h3><div style="overflow-x:auto;margin-top:8px"><table class="tbl" id="hTable"></table></div></div>
 <div class="mut">El día se guarda en memoria cada 5 min (se pierde si se corta la luz). Semana y mes quedan guardados en el equipo por hora, hasta 35 días.</div>
 </section>
@@ -268,7 +270,7 @@ function renderHome(){
  const lt=L.length?L.map(([r,i])=>{const l=C.relays[i].light;return `${esc(r.name)}: ${hrs(l.on)}/${hrs(l.off)} · ${r.on?'prendida':'apagada'}${r.next&&r.mode=='auto'?' · cambia en '+dur(r.next):''}`}).join('<br>'):'Sin luces asignadas';
  const ft=F.length?F.map(([r])=>`${esc(r.name)}: ${r.on?'prendido':'apagado'}`).join(' · '):'Sin ventilación asignada';
  let nx=null;I.forEach(([r,i])=>C.relays[i].events.filter(e=>e.en).forEach(e=>{const now=S.time.valid?toMin(S.time.local.slice(11,16)):0;const d=(toMin(e.start)-now+1440)%1440;if(nx===null||d<nx.d)nx={d,s:e.start,n:r.name}}));
- const it=I.length?(nx?`Próximo: ${nx.s} (${esc(nx.n)})`:'Sin riegos programados'):'Sin riego asignado';
+ const so=tentS().soil,it=(I.length?(nx?`Próximo: ${nx.s} (${esc(nx.n)})`:'Sin riegos programados'):'Sin riego asignado')+(so?' · suelo '+(so.valid?so.percent+' %':'sin lectura'):'');
  $('summary').innerHTML=[['luz','💡 Iluminación',lt],['clima','🌡️ Clima',ft],['riego','💧 Riego',it]].map(([k,h,b])=>`<a href="#${k}" class="card"><h3>${h} ›</h3><div class="mut" style="margin-top:6px">${b}</div></a>`).join('');
  drawChart();
 }
@@ -316,7 +318,7 @@ async function saveClimate(){const tents=C.tents.map(()=>({}));tents[TENT]={clim
 async function setAux(i,type){C=await call('/api/config',{relays:relaysArr(i,{type})},'Salida asignada como '+TYPES[type]);await refresh()}
 
 function renderIrrig(){
- const I=idx(['irrigation']);if(dirty.has('riego'))return refreshStates('I',irrigStatus);
+ const I=idx(['irrigation']);renderSoil();if(dirty.has('riego'))return refreshStates('I',irrigStatus);
  $('irrig').innerHTML=I.length?I.map(([r,i])=>{const ev=C.relays[i].events;
   return `<div class="card" id="I${i}"><div class="rhead"><h3><span class="dot ${r.on?'on':''}"></span>${esc(r.name)}</h3>${seg(i,r.mode)}</div>
   <div class="mut" data-st>${irrigStatus(r)}</div>
@@ -326,11 +328,34 @@ function renderIrrig(){
   <div class="row"><label>Riegos por día<input type="number" id="an${i}" value="3" min="1" max="8"></label><label>Duración c/u (s)<input type="number" id="ad${i}" value="60" min="1"></label>
   <label>Primero (h después de prender)<input type="number" step="0.5" id="aa${i}" value="1"></label><label>Último (h antes de apagar)<input type="number" step="0.5" id="ab${i}" value="3"></label></div>
   <button class="btn sec sm" data-dirty onclick="assist(${i})">Generar</button> <span class="mut">Reemplaza la tabla; revisá y guardá.</span></details>
+  ${soilOpts(i)}
   <div class="actions" style="border-top:1px solid var(--line);padding-top:10px"><button class="btn" onclick="saveIrrig(${i})">Guardar riegos</button>
   <span style="flex:1"></span><span data-nodirty style="display:contents"><input type="number" id="pn${i}" value="30" min="1" max="3600" style="width:80px"></span><span class="mut">s</span><button class="btn sec" onclick="pulse(${i})">Regar ahora</button>${r.pulse?`<button class="btn sec" onclick="pulse(${i},0)">Cortar</button>`:''}</div></div>`}).join('')
   :'<div class="card empty">No hay relés asignados a riego. Asignalos en Ajustes.</div>';
  I.forEach(([,i])=>evTotal(i));
 }
+// ---------- humedad de suelo ----------
+function soilOpts(i){const t=C.tents[C.relays[i].tent];if(!t.soil.enabled)return '';const o=C.relays[i].soil,on=o.skip||o.below;
+ return `<details style="margin-top:10px" ${on?'open':''}><summary class="mut" style="cursor:pointer">🪴 Según humedad de suelo${on?'':' (apagado)'}</summary>
+ <div class="row"><label>Saltear el riego si está arriba de (%)<input type="number" id="ss${i}" min="0" max="100" value="${o.skip}"></label><label>Regar extra si baja de (%)<input type="number" id="sb${i}" min="0" max="100" value="${o.below}"></label></div>
+ <div class="row"><label>Duración del riego extra (s)<input type="number" id="sd${i}" min="1" max="3600" value="${o.dur}"></label><label>Máximo de riegos extra por día<input type="number" id="sm${i}" min="1" max="12" value="${o.max}"></label></div>
+ <div class="mut">0 = no usar esa opción. Los riegos extra solo se hacen en Auto, con luces prendidas y con al menos 1 h entre uno y otro. Un buen punto de partida: saltear arriba de 60 %, regar extra debajo de 30 %.</div></details>`}
+function renderSoil(){const cfg=tentC().soil,st=tentS().soil;
+ $('soilPct').textContent=st&&st.valid?st.percent+' %':'';
+ $('soilLive').innerHTML=!cfg.enabled?'Opcional: con 2 o 3 sensores capacitivos por carpa el equipo puede saltear riegos si la tierra está húmeda y regar si se seca.':
+  !st||!st.present?'<span class="bad">No responde el ADS1115 de esta carpa (ver docs/hardware.md).</span>':
+  st.sensors.map((x,k)=>`Sensor ${k+1}: ${x.valid?x.percent+' % <span class="mut">('+x.raw+')</span>':'<span class="bad">sin lectura</span>'}`).join(' · ');
+ if(dirty.has('riego'))return;
+ $('soilCfg').innerHTML=`<label style="display:flex;gap:8px;align-items:center;color:var(--fg);margin-top:10px"><input type="checkbox" id="soEn" ${cfg.enabled?'checked':''} onchange="$('soMore').hidden=!this.checked"> Tengo sensores de suelo en esta carpa</label>
+ <div id="soMore" ${cfg.enabled?'':'hidden'}><div class="row"><label>Sensores conectados (A0 en adelante)<select id="soN">${[1,2,3,4].map(n=>`<option ${n==cfg.count?'selected':''}>${n}</option>`).join('')}</select></label>
+ <label>Lectura en seco (0 %)<input type="number" id="soDry" value="${cfg.dry}"></label><label>Lectura en agua (100 %)<input type="number" id="soWet" value="${cfg.wet}"></label></div>
+ <details class="tip" style="margin:8px 0"><summary>Cómo calibrar (2 minutos)</summary><ol style="margin:8px 0;padding-left:20px;line-height:1.5">
+ <li>Con los sensores al aire y secos, tocá <b>Seco = lectura actual</b>.</li><li>Metelos en un vaso de agua hasta la línea (no más), esperá 30 s y tocá <b>Mojado = lectura actual</b>.</li><li>Guardá y clavalos en las macetas, a la misma profundidad y lejos del gotero.</li></ol></details>
+ <div class="actions"><button class="btn sec" data-dirty onclick="soilCal('soDry')">Seco = lectura actual</button><button class="btn sec" data-dirty onclick="soilCal('soWet')">Mojado = lectura actual</button></div></div>
+ <div class="actions"><button class="btn" onclick="saveSoil()">Guardar</button></div>`}
+function soilCal(id){const st=tentS().soil;if(!st||!st.valid)return toast('No hay lectura de los sensores',true);$(id).value=st.raw;toast('Cargado, falta guardar')}
+async function saveSoil(){const tents=C.tents.map(()=>({}));tents[TENT]={soil:{enabled:$('soEn').checked,count:+$('soN').value,dry:+$('soDry').value,wet:+$('soWet').value}};
+ C=await call('/api/config',{tents},'Sensores de suelo guardados');dirty.delete('riego');await refresh()}
 function irrigStatus(r){return (r.mode=='auto'?esc(r.reason):'Modo manual. Pasalo a Auto para que riegue según la tabla.')+(r.pulse?' · regando, faltan '+dur(r.pulse):'')}
 function evRow(e){return `<tr><td><input type="time" value="${e.start}" data-k="start"></td><td><input type="number" min="1" max="3600" value="${e.dur}" data-k="dur" oninput="evTotal()"></td><td><input type="checkbox" ${e.en?'checked':''} data-k="en" onchange="evTotal()"></td><td><button class="btn sec sm" data-dirty onclick="this.closest('tr').remove();evTotal()">✕</button></td></tr>`}
 function readEv(i){return [...$('ev'+i).querySelectorAll('tr')].map(tr=>{const q=k=>tr.querySelector(`[data-k=${k}]`);return {start:q('start').value,dur:+q('dur').value,en:q('en').checked}})}
@@ -341,7 +366,8 @@ function assist(i){const L=idx(['light']);let st=6*60,on=18*60;if(L.length){cons
  if(b<a)return toast('No entra en el horario de luz',true);
  const ev=[...Array(n).keys()].map(k=>({start:hhmm(Math.round(n==1?a:a+(b-a)*k/(n-1))),dur:d,en:true}));
  $('ev'+i).innerHTML=ev.map(evRow).join('');evTotal(i);toast('Generado, falta guardar')}
-async function saveIrrig(i){C=await call('/api/config',{relays:relaysArr(i,{events:readEv(i)})},'Riegos guardados');dirty.delete('riego');await refresh()}
+async function saveIrrig(i){const o={events:readEv(i)};if($('ss'+i))o.soil={skip:+$('ss'+i).value,below:+$('sb'+i).value,dur:+$('sd'+i).value,max:+$('sm'+i).value};
+ C=await call('/api/config',{relays:relaysArr(i,o)},'Riegos guardados');dirty.delete('riego');await refresh()}
 async function pulse(i,s){S=await call('/api/relay',{id:i,pulse:s===undefined?+$('pn'+i).value:s},s===0?'Riego cortado':'Regando');renderAll()}
 
 // Mientras se edita un formulario solo se actualizan los estados, sin pisar lo que se está escribiendo.
@@ -405,17 +431,18 @@ async function loadRange(r){if(r)HR=r;$('rangeSel').innerHTML=RANGES.map(([k,l])
  try{HD=await api('/api/history?range='+HR+'&tent='+TENT);renderHist()}catch(e){}}
 // Agrupa registros por hora en días (hora local).
 function hoursToDays(d){const out=[];d.ts.forEach((ts,k)=>{const dt=new Date(ts*1000);dt.setHours(0,0,0,0);let x=out[out.length-1];
- if(!x||x.ts!=dt/1000){x={ts:dt/1000,ts_:[],t:[],tn:[],tx:[],h:[],hn:[],hx:[],v:[],light:0,fan:0,irr:0};out.push(x)}
- ['t','tn','tx','h','hn','hx','v'].forEach(f=>{if(d[f][k]!=null)x[f].push(d[f][k])});x.light+=d.light[k];x.fan+=d.fan[k];x.irr+=d.irr[k]});
+ if(!x||x.ts!=dt/1000){x={ts:dt/1000,ts_:[],t:[],tn:[],tx:[],h:[],hn:[],hx:[],v:[],s:[],light:0,fan:0,irr:0};out.push(x)}
+ ['t','tn','tx','h','hn','hx','v','s'].forEach(f=>{if(d[f]&&d[f][k]!=null)x[f].push(d[f][k])});x.light+=d.light[k];x.fan+=d.fan[k];x.irr+=d.irr[k]});
  const avg=a=>a.length?a.reduce((p,c)=>p+c,0)/a.length:null;
- return out.map(x=>({ts:x.ts,t:avg(x.t),tn:x.tn.length?Math.min(...x.tn):null,tx:x.tx.length?Math.max(...x.tx):null,h:avg(x.h),hn:x.hn.length?Math.min(...x.hn):null,hx:x.hx.length?Math.max(...x.hx):null,v:avg(x.v),light:x.light,fan:x.fan,irr:x.irr}))}
+ return out.map(x=>({ts:x.ts,t:avg(x.t),tn:x.tn.length?Math.min(...x.tn):null,tx:x.tx.length?Math.max(...x.tx):null,h:avg(x.h),hn:x.hn.length?Math.min(...x.hn):null,hx:x.hx.length?Math.max(...x.hx):null,v:avg(x.v),s:avg(x.s),light:x.light,fan:x.fan,irr:x.irr}))}
 function renderHist(){if(!HD)return;
  let xs=[],ser={},days=[],xfmt;
- if(HR=='day'){const n=HD.t.length,now=Date.now()-HD.age*1000;xs=HD.t.map((_,k)=>now-(n-1-k)*HD.interval*1000);ser={t:HD.t,h:HD.h,v:HD.v};days=(HD.today&&HD.today.days)||[];xfmt=ms=>{const d=new Date(ms);return pad2(d.getHours())+':'+pad2(d.getMinutes())}}
+ if(HR=='day'){const n=HD.t.length,now=Date.now()-HD.age*1000;xs=HD.t.map((_,k)=>now-(n-1-k)*HD.interval*1000);ser={t:HD.t,h:HD.h,v:HD.v,s:HD.s||[]};days=(HD.today&&HD.today.days)||[];xfmt=ms=>{const d=new Date(ms);return pad2(d.getHours())+':'+pad2(d.getMinutes())}}
  else if(HR=='week'){xs=HD.ts.map(t=>t*1000);ser=HD;days=hoursToDays(HD);xfmt=fmtDay}
- else{days=HD.days;xs=days.map(d=>d.ts*1000);ser={};['t','tn','tx','h','hn','hx','v'].forEach(f=>ser[f]=days.map(d=>d[f]==null?null:+d[f]));xfmt=ms=>{const d=new Date(ms);return d.getDate()+'/'+(d.getMonth()+1)}}
+ else{days=HD.days;xs=days.map(d=>d.ts*1000);ser={};['t','tn','tx','h','hn','hx','v','s'].forEach(f=>ser[f]=days.map(d=>d[f]==null?null:+d[f]));xfmt=ms=>{const d=new Date(ms);return d.getDate()+'/'+(d.getMonth()+1)}}
  const css=getComputedStyle(document.body),col=n=>css.getPropertyValue(n).trim();
  lineChart($('hcT'),xs,ser.t,ser.tn,ser.tx,col('--warn'),1,xfmt);lineChart($('hcH'),xs,ser.h,ser.hn,ser.hx,col('--acc2'),0,xfmt);lineChart($('hcV'),xs,ser.v,null,null,col('--acc'),2,xfmt);
+ const hasS=(ser.s||[]).some(v=>v!=null);$('hSoil').hidden=!hasS;if(hasS)lineChart($('hcS'),xs,ser.s,null,null,col('--acc2'),0,xfmt);
  $('hlT').innerHTML=HR=='day'?'':`<span><i style="background:${col('--warn')}"></i>promedio</span><span><i style="background:${col('--warn')};opacity:.3;height:8px"></i>mínimo a máximo</span>`;
  // resumen
  const num=a=>a.filter(v=>v!=null).map(Number),avg=a=>{a=num(a);return a.length?a.reduce((p,c)=>p+c,0)/a.length:null},mn=a=>{a=num(a);return a.length?Math.min(...a):null},mx=a=>{a=num(a);return a.length?Math.max(...a):null};

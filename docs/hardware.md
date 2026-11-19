@@ -18,6 +18,8 @@ Pensado para una carpa de 1,5 m con 8 salidas a relé, sensor de temperatura/hum
 
 Para la segunda carpa, sumá: 1 módulo de 8 relés más, 1 **PCF8574** (módulo I2C, dirección 0x20) y los sensores (hasta 2 SHT30/SHT31/SHT40 por carpa).
 
+Para regar según la humedad de la tierra (opcional), por carpa: 1 **ADS1115** (módulo conversor I2C de 4 canales, dirección 0x48) y 2 a 4 **sensores capacitivos de humedad de suelo v1.2/v2.0**.
+
 Opcional para más adelante: humidificador ultrasónico, deshumidificador, sensor de humedad de suelo capacitivo, sensor de nivel del tanque.
 
 ## Pines
@@ -89,6 +91,26 @@ Segundo módulo de relés: VCC ── 3V3, JD-VCC ── 5V, GND común (igual q
 - El clima de cada carpa es el **promedio** de sus sensores que respondan; si uno falla se usa el otro. En Inicio se ve la lectura de cada sensor.
 - Conviene ponerlos a distinta altura (canopy y arriba) o en lados opuestos: el promedio representa mejor la carpa.
 - La carpa 2 se activa en Ajustes > Carpas; ahí también se elige a qué carpa pertenece cada relé (por defecto 1-8 carpa 1 y 9-16 carpa 2).
+
+## Humedad de suelo (opcional)
+
+El ESP32 no tiene entradas analógicas libres para varios sensores, así que se leen con un **ADS1115** por carpa, colgado del mismo bus I2C que los SHT de esa carpa.
+
+```
+ADS1115  VDD ── 3V3     GND ── GND
+         SDA/SCL ── bus de la carpa (carpa 1: GPIO21/22, carpa 2: GPIO32/33)
+         ADDR ── GND               (dirección 0x48)
+         A0..A3 ── AOUT de cada sensor capacitivo
+
+Sensor capacitivo: VCC ── 3V3, GND ── GND, AOUT ── A0 (el segundo a A1, etc.)
+```
+
+- Alimentá los sensores con **3,3 V** (no 5 V): así su salida nunca pasa del rango del ADS1115.
+- Usá sensores **capacitivos**, no los resistivos de dos patitas: esos se corroen en semanas.
+- Se activa en Riego > Humedad de suelo. Ahí se calibra (al aire = seco, en un vaso de agua = mojado) y en cada relé de riego se elige:
+  - **Saltear** un riego programado si la tierra está arriba de un %.
+  - **Regar extra** si baja de un %: solo en Auto, con luces prendidas, al menos 1 h entre riegos extra y con un tope por día.
+- Clavalos a la misma profundidad en macetas parecidas y lejos del gotero; el equipo usa el promedio. Si uno falla, sigue con los demás.
 
 ## 220 V – seguridad
 

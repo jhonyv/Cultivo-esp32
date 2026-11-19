@@ -8,6 +8,7 @@
 #include "relays.h"
 #include "sensors.h"
 #include "settings.h"
+#include "soil.h"
 
 static uint32_t restartAt = 0;
 
@@ -57,6 +58,25 @@ static void statusJson(JsonDocument& doc) {
       if (r.valid) {
         so["temperature"] = serialized(String(r.temperature, 1));
         so["humidity"] = serialized(String(r.humidity, 1));
+      }
+    }
+    if (settings.tents[t].soil.enabled) {
+      const SoilReading& s = soil(t);
+      JsonObject so = o["soil"].to<JsonObject>();
+      so["present"] = soilPresent(t);
+      so["valid"] = s.valid;
+      if (s.valid) {
+        so["percent"] = serialized(String(s.percent, 0));
+        so["raw"] = s.raw;
+      }
+      JsonArray ch = so["sensors"].to<JsonArray>();
+      for (uint8_t k = 0; k < settings.tents[t].soil.count; k++) {
+        JsonObject c = ch.add<JsonObject>();
+        c["valid"] = s.chValid[k];
+        if (s.chValid[k]) {
+          c["percent"] = serialized(String(s.chPercent[k], 0));
+          c["raw"] = s.chRaw[k];
+        }
       }
     }
   }

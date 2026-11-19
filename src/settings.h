@@ -31,6 +31,14 @@ struct IrrigationEvent {
   bool enabled;
 };
 
+// Riego según humedad de suelo (0 = opción apagada). Solo actúa si la carpa tiene lectura de suelo.
+struct IrrigationSoil {
+  uint8_t skipAbove;  // % : saltear un riego programado si la tierra está por encima
+  uint8_t waterBelow; // % : regar fuera de horario si baja de esto (solo con luces prendidas)
+  uint16_t durSec;    // duración de ese riego extra
+  uint8_t maxPerDay;  // tope de riegos extra por día
+};
+
 struct RelayConfig {
   char name[24];
   uint8_t tent;  // carpa a la que pertenece (0 o 1)
@@ -39,6 +47,7 @@ struct RelayConfig {
   LightSchedule light;  // usado si type == Light
   uint8_t eventCount;   // usado si type == Irrigation
   IrrigationEvent events[MAX_IRRIGATION_EVENTS];
+  IrrigationSoil soil;  // usado si type == Irrigation y la carpa tiene sensores de suelo
 };
 
 struct ClimateTargets {
@@ -52,10 +61,19 @@ struct ClimateConfig {
   uint16_t ventOnMin, ventEveryMin;  // renovación de aire: extractor X min cada Y min (0 = desactivado)
 };
 
+// Sensores capacitivos de suelo (opcional). Calibración en cuentas del ADS1115.
+struct SoilConfig {
+  bool enabled;
+  uint8_t count;  // sensores conectados en A0..A(count-1)
+  uint16_t dry;   // lectura al aire (0 %)
+  uint16_t wet;   // lectura en un vaso de agua (100 %)
+};
+
 struct TentConfig {
   char name[24];
   bool enabled;
   ClimateConfig climate;
+  SoilConfig soil;
 };
 
 struct Settings {

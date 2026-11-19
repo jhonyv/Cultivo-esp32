@@ -18,6 +18,8 @@ static const uint8_t RELAY_PINS[NUM_GPIO_RELAYS] = {16, 17, 18, 19, 23, 25, 26, 
 #define PIN_I2C2_SCL 33
 #define I2C_FREQ 100000
 #define SENSORS_PER_TENT 2  // SHT en 0x44 y 0x45 (pin ADDR) de cada bus
+#define ADS1115_ADDR 0x48     // humedad de suelo (opcional), uno por bus/carpa
+#define SOIL_SENSORS_MAX 4    // canales A0..A3 del ADS1115
 
 #define PIN_BUTTON 0  // botón BOOT: mantener 5 s para borrar el WiFi
 #define PIN_LED 2

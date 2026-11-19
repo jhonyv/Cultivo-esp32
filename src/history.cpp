@@ -4,11 +4,13 @@
 #include "relays.h"
 #include "sensors.h"
 #include "settings.h"
+#include "soil.h"
 
 struct Sample {
   int16_t t;  // °C x10
   int16_t h;  // % x10
   int16_t v;  // kPa x100
+  int16_t s;  // humedad de suelo % x10
 };
 
 struct __attribute__((packed)) HourRecord {
@@ -18,6 +20,14 @@ struct __attribute__((packed)) HourRecord {
   int16_t vAvg;              // kPa x100
   uint16_t lightMin, fanMin;
   uint16_t irrigSec;
+  int16_t soilAvg;  // % x10 (INT16_MIN = sin lectura)
+};
+
+// Formato anterior (sin suelo), para migrar el archivo sin perder el historial.
+struct __attribute__((packed)) HourRecordV1 {
+  uint32_t hour;
+  int16_t tAvg, tMin, tMax, hAvg, hMin, hMax, vAvg;
+  uint16_t lightMin, fanMin, irrigSec;
 };
 
 // Un archivo por carpa (la carpa 1 conserva el nombre de antes de las 2 carpas).
@@ -33,8 +43,8 @@ static uint32_t lastTick = 0;
 // Acumulador de la hora en curso, por carpa.
 struct Accumulator {
   uint32_t hour;
-  float tSum, hSum, vSum, tMin, tMax, hMin, hMax;
-  uint32_t n, lightSec, fanSec, irrigSec;
+  float tSum, hSum, vSum, tMin, tMax, hMin, hMax, soilSum;
+  uint32_t n, soilN, lightSec, fanSec, irrigSec;
 };
 static Accumulator accs[NUM_TENTS];
 
@@ -64,6 +74,7 @@ static void flushHour(uint8_t tent) {
   r.lightMin = acc.lightSec / 60;
   r.fanMin = acc.fanSec / 60;
   r.irrigSec = min<uint32_t>(acc.irrigSec, 65535);
+  r.soilAvg = acc.soilN ? lroundf(acc.soilSum / acc.soilN * 10) : INT16_MIN;
 
   File f = LittleFS.open(HOURLY_FILES[tent], "r+");
   if (!f) return;
@@ -83,6 +94,21 @@ void historyBegin() {
     size_t size = f ? f.size() : 0;
     if (f) f.close();
     if (size == HISTORY_HOURS * sizeof(HourRecord)) continue;
+    if (size == HISTORY_HOURS * sizeof(HourRecordV1)) {
+      File in = LittleFS.open(HOURLY_FILES[t], "r");
+      File out = LittleFS.open("/hourly.tmp", "w");
+      HourRecordV1 o;
+      while (in.read((uint8_t*)&o, sizeof(o)) == sizeof(o)) {
+        HourRecord r = {o.hour, o.tAvg, o.tMin, o.tMax, o.hAvg, o.hMin, o.hMax, o.vAvg, o.lightMin, o.fanMin, o.irrigSec, INT16_MIN};
+        out.write((const uint8_t*)&r, sizeof(r));
+      }
+      in.close();
+      out.close();
+      LittleFS.remove(HOURLY_FILES[t]);
+      LittleFS.rename("/hourly.tmp", HOURLY_FILES[t]);
+      Serial.printf("[hist] historial de la carpa %u actualizado al formato con suelo\n", t + 1);
+      continue;
+    }
     f = LittleFS.open(HOURLY_FILES[t], "w");
     HourRecord empty = {};
     for (uint32_t i = 0; i < HISTORY_HOURS; i++) f.write((const uint8_t*)&empty, sizeof(empty));
@@ -95,14 +121,16 @@ void historyBegin() {
 static void sampleRam() {
   if (count && millis() - lastSample < HISTORY_INTERVAL_S * 1000UL) return;
   bool any = false;
-  for (uint8_t t = 0; t < NUM_TENTS; t++) any |= climate(t).valid;
+  for (uint8_t t = 0; t < NUM_TENTS; t++) any |= climate(t).valid || soil(t).valid;
   if (!any) return;
   lastSample = millis();
   for (uint8_t t = 0; t < NUM_TENTS; t++) {
     const Climate& c = climate(t);
+    const SoilReading& s = soil(t);
     samples[t][head] = c.valid ? Sample{(int16_t)lroundf(c.temperature * 10), (int16_t)lroundf(c.humidity * 10),
-                                        (int16_t)lroundf(c.vpd * 100)}
-                               : Sample{INT16_MIN, INT16_MIN, INT16_MIN};
+                                        (int16_t)lroundf(c.vpd * 100), INT16_MIN}
+                               : Sample{INT16_MIN, INT16_MIN, INT16_MIN, INT16_MIN};
+    if (s.valid) samples[t][head].s = lroundf(s.percent * 10);
   }
   head = (head + 1) % HISTORY_SIZE;
   if (count < HISTORY_SIZE) count++;
@@ -126,6 +154,11 @@ static void tickHourly(uint8_t tent) {
     acc.hMin = min(acc.hMin, c.humidity);
     acc.hMax = max(acc.hMax, c.humidity);
     acc.n++;
+  }
+  const SoilReading& s = soil(tent);
+  if (s.valid) {
+    acc.soilSum += s.percent;
+    acc.soilN++;
   }
   bool light = false, fan = false, irrig = false;
   for (uint8_t i = 0; i < NUM_RELAYS; i++) {
@@ -161,11 +194,13 @@ void historyToJson(JsonObject obj, uint8_t tent) {
   JsonArray t = obj["t"].to<JsonArray>();
   JsonArray h = obj["h"].to<JsonArray>();
   JsonArray v = obj["v"].to<JsonArray>();
+  JsonArray so = obj["s"].to<JsonArray>();
   for (uint16_t k = 0; k < count; k++) {
     const Sample& s = samples[tent][(head + HISTORY_SIZE - count + k) % HISTORY_SIZE];
     addClimate(t, s.t, 10);
     addClimate(h, s.h, 10);
     addClimate(v, s.v, 100);
+    addClimate(so, s.s, 10);
   }
 }
 
@@ -190,6 +225,7 @@ void historyHourlyToJson(JsonObject obj, uint8_t tent, uint16_t hours) {
   JsonArray t = obj["t"].to<JsonArray>(), tn = obj["tn"].to<JsonArray>(), tx = obj["tx"].to<JsonArray>();
   JsonArray h = obj["h"].to<JsonArray>(), hn = obj["hn"].to<JsonArray>(), hx = obj["hx"].to<JsonArray>();
   JsonArray v = obj["v"].to<JsonArray>();
+  JsonArray so = obj["s"].to<JsonArray>();
   JsonArray light = obj["light"].to<JsonArray>(), fan = obj["fan"].to<JsonArray>(), irr = obj["irr"].to<JsonArray>();
   forEachHour(tent, hours, [&](const HourRecord& r) {
     ts.add(r.hour * 3600);
@@ -200,6 +236,7 @@ void historyHourlyToJson(JsonObject obj, uint8_t tent, uint16_t hours) {
     addClimate(hn, r.hMin, 10);
     addClimate(hx, r.hMax, 10);
     addClimate(v, r.vAvg, 100);
+    addClimate(so, r.soilAvg, 10);
     light.add(r.lightMin);
     fan.add(r.fanMin);
     irr.add(r.irrigSec);
@@ -210,8 +247,8 @@ void historyDailyToJson(JsonObject obj, uint8_t tent, uint8_t days) {
   struct Day {
     int32_t key;  // año*1000 + día del año (hora local)
     uint32_t ts;
-    float tSum, hSum, vSum, tMin, tMax, hMin, hMax;
-    uint16_t n;
+    float tSum, hSum, vSum, tMin, tMax, hMin, hMax, sSum;
+    uint16_t n, sN;
     uint32_t light, fan, irr;
   };
   static Day d[36];
@@ -224,7 +261,7 @@ void historyDailyToJson(JsonObject obj, uint8_t tent, uint8_t days) {
     if (!nd || d[nd - 1].key != key) {
       if (nd == 36) return;
       tm.tm_hour = tm.tm_min = tm.tm_sec = 0;
-      d[nd] = {key, (uint32_t)mktime(&tm), 0, 0, 0, 1e9, -1e9, 1e9, -1e9, 0, 0, 0, 0};
+      d[nd] = {key, (uint32_t)mktime(&tm), 0, 0, 0, 1e9, -1e9, 1e9, -1e9, 0, 0, 0, 0, 0, 0};
       nd++;
     }
     Day& x = d[nd - 1];
@@ -237,6 +274,10 @@ void historyDailyToJson(JsonObject obj, uint8_t tent, uint8_t days) {
       x.hMin = min(x.hMin, r.hMin / 10.0f);
       x.hMax = max(x.hMax, r.hMax / 10.0f);
       x.n++;
+    }
+    if (r.soilAvg != INT16_MIN) {
+      x.sSum += r.soilAvg / 10.0f;
+      x.sN++;
     }
     x.light += r.lightMin;
     x.fan += r.fanMin;
@@ -258,6 +299,7 @@ void historyDailyToJson(JsonObject obj, uint8_t tent, uint8_t days) {
       o["hx"] = serialized(String(x.hMax, 1));
       o["v"] = serialized(String(x.vSum / x.n, 2));
     }
+    if (x.sN) o["s"] = serialized(String(x.sSum / x.sN, 0));
     o["light"] = x.light;  // minutos
     o["fan"] = x.fan;      // minutos
     o["irr"] = x.irr;      // segundos

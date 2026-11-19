@@ -3,6 +3,7 @@
 #include "relays.h"
 #include "sensors.h"
 #include "settings.h"
+#include "soil.h"
 
 static const char* reasons[NUM_RELAYS];
 static uint32_t nextLightChange[NUM_RELAYS];
@@ -26,7 +27,8 @@ static bool lightOn(const LightSchedule& l, time_t now, uint32_t& untilChange) {
   return on;
 }
 
-static bool irrigationOn(const RelayConfig& r, time_t now) {
+// Riego programado en curso: devuelve el índice del evento (o -1).
+static int8_t activeEvent(const RelayConfig& r, time_t now) {
   struct tm tm;
   localtime_r(&now, &tm);
   int32_t sec = tm.tm_hour * 3600 + tm.tm_min * 60 + tm.tm_sec;
@@ -34,10 +36,19 @@ static bool irrigationOn(const RelayConfig& r, time_t now) {
     const IrrigationEvent& ev = r.events[e];
     if (!ev.enabled) continue;
     int32_t since = (sec - ev.startMin * 60 + 86400) % 86400;
-    if (since < ev.durSec) return true;
+    if (since < ev.durSec) return e;
   }
-  return false;
+  return -1;
 }
+
+// Estado del riego por humedad de suelo, por relé.
+static const uint32_t SOIL_MIN_GAP_MS = 60UL * 60 * 1000;  // espera entre riegos extra, para que el agua se reparta
+static int8_t decidedEvent[NUM_RELAYS];  // evento ya evaluado + 1, 0 = ninguno (saltear se decide al empezar)
+static bool skipEvent[NUM_RELAYS];
+static uint8_t soilWaterings[NUM_RELAYS];
+static int32_t soilDay[NUM_RELAYS];
+static uint32_t lastSoilWater[NUM_RELAYS];
+static bool soilWatered[NUM_RELAYS];  // hubo al menos un riego extra (para respetar la espera)
 
 static void updateLights(time_t now, bool clockOk) {
   bool anyLight[NUM_TENTS] = {}, anyOn[NUM_TENTS] = {};
@@ -113,12 +124,47 @@ static void updateClimate(time_t now, bool clockOk) {
 }
 
 static void updateIrrigation(time_t now, bool clockOk) {
+  struct tm tm;
+  localtime_r(&now, &tm);
+  int32_t today = clockOk ? tm.tm_year * 1000 + tm.tm_yday : millis() / 86400000UL;
   for (uint8_t i = 0; i < NUM_RELAYS; i++) {
     const RelayConfig& r = settings.relays[i];
-    if (r.type != RelayType::Irrigation) continue;
-    bool on = clockOk && irrigationOn(r, now);
+    if (r.type != RelayType::Irrigation) {
+      decidedEvent[i] = 0;
+      continue;
+    }
+    const SoilReading& s = soil(r.tent);
+    if (soilDay[i] != today) soilDay[i] = today, soilWaterings[i] = 0;
+
+    int8_t ev = clockOk ? activeEvent(r, now) : -1;
+    if (ev + 1 != decidedEvent[i]) {
+      // Arranca un riego programado: con la tierra todavía húmeda se saltea entero.
+      decidedEvent[i] = ev + 1;
+      skipEvent[i] = ev >= 0 && r.soil.skipAbove && s.valid && s.percent >= r.soil.skipAbove;
+      if (skipEvent[i]) Serial.printf("[riego] %s: tierra al %.0f %%, riego salteado\n", r.name, s.percent);
+    }
+    bool on = ev >= 0 && !skipEvent[i];
     relaySetAuto(i, on);
-    reasons[i] = !clockOk ? "sin hora" : on ? "regando" : "esperando próximo riego";
+
+    // Riego extra cuando la tierra se seca, solo en Auto, con luces prendidas y respetando el tope diario.
+    bool dry = r.soil.waterBelow && s.valid && s.percent < r.soil.waterBelow;
+    if (dry && !on && r.mode == RelayMode::Auto && isDay[r.tent] && !relayPulseRemaining(i) &&
+        soilWaterings[i] < r.soil.maxPerDay && (!soilWatered[i] || millis() - lastSoilWater[i] > SOIL_MIN_GAP_MS)) {
+      relayPulse(i, r.soil.durSec);
+      soilWaterings[i]++;
+      soilWatered[i] = true;
+      lastSoilWater[i] = millis();
+      Serial.printf("[riego] %s: tierra al %.0f %%, riego extra de %u s\n", r.name, s.percent, r.soil.durSec);
+    }
+
+    if (!clockOk && !r.soil.waterBelow) reasons[i] = "sin hora";
+    else if (on) reasons[i] = "regando";
+    else if (ev >= 0) reasons[i] = "tierra húmeda: riego salteado";
+    else if (relayPulseRemaining(i) && dry) reasons[i] = "tierra seca: riego extra";
+    else if (dry && soilWaterings[i] >= r.soil.maxPerDay) reasons[i] = "tierra seca, tope de riegos extra del día";
+    else if (dry && !isDay[r.tent]) reasons[i] = "tierra seca, espera a que prendan las luces";
+    else if (r.soil.waterBelow && s.valid) reasons[i] = "esperando próximo riego o que se seque la tierra";
+    else reasons[i] = "esperando próximo riego";
   }
 }
 

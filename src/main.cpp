@@ -10,6 +10,7 @@
 #include "relays.h"
 #include "sensors.h"
 #include "settings.h"
+#include "soil.h"
 #include "telegram.h"
 #include "web.h"
 
@@ -25,6 +26,7 @@ void setup() {
   clockBegin();
   historyBegin();
   sensorsBegin();
+  soilBegin();
 
   netBegin();
   webBegin();
@@ -36,6 +38,7 @@ void loop() {
   netLoop();
   webLoop();
   sensorsLoop();
+  soilLoop();
   clockLoop();
   historyLoop();
   automationLoop();
