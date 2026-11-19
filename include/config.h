@@ -30,4 +30,5 @@ static const uint8_t RELAY_PINS[NUM_GPIO_RELAYS] = {16, 17, 18, 19, 23, 25, 26, 
 #define SENSOR_INTERVAL_MS 2000
 #define WIFI_CONNECT_TIMEOUT_MS 15000
 #define WIFI_RETRY_MS 60000
+#define WIFI_RETRY_AP_CLIENT_MS 300000  // con alguien conectado a la red propia se reintenta menos (cada intento la corta un momento)
 #define AP_OFF_DELAY_MS 120000  // apaga el AP 2 min después de conectarse a tu WiFi

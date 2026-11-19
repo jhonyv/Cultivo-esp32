@@ -64,6 +64,7 @@ struct Settings {
   bool relayActiveLow;
   float leafOffset;  // °C, temperatura de hoja respecto del aire (para VPD)
   char apPassword[33];
+  bool apAlways;  // red propia "Cultivo-XXXX" siempre prendida, no solo cuando falla el WiFi
   char tz[48];
   char webPassword[33];     // vacía = página sin contraseña (usuario "cultivo")
   char telegramToken[64];   // token del bot de @BotFather, vacío = bot apagado

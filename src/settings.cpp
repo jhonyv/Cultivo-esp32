@@ -94,6 +94,7 @@ static void settingsDefaults() {
   settings.relayActiveLow = true;
   settings.leafOffset = -2.0f;
   strlcpy(settings.apPassword, AP_PASSWORD_DEFAULT, sizeof(settings.apPassword));
+  settings.apAlways = false;
   strlcpy(settings.tz, TZ_DEFAULT, sizeof(settings.tz));
   settings.webPassword[0] = 0;
   settings.telegramToken[0] = 0;
@@ -207,6 +208,7 @@ void settingsToJson(JsonObject obj, bool secrets) {
   obj["relayActiveLow"] = settings.relayActiveLow;
   obj["leafOffset"] = settings.leafOffset;
   obj["apPassword"] = settings.apPassword;
+  obj["apAlways"] = settings.apAlways;
   obj["tz"] = settings.tz;
   obj["telegramChat"] = settings.telegramChat;
   obj["telegramAlerts"] = settings.telegramAlerts;
@@ -273,6 +275,7 @@ bool settingsFromJson(JsonObjectConst obj, String& error) {
     }
     strlcpy(s.apPassword, p, sizeof(s.apPassword));
   }
+  if (obj["apAlways"].is<bool>()) s.apAlways = obj["apAlways"];
   if (obj["tz"].is<const char*>()) strlcpy(s.tz, obj["tz"], sizeof(s.tz));
   if (obj["webPassword"].is<const char*>()) strlcpy(s.webPassword, obj["webPassword"], sizeof(s.webPassword));
   if (obj["telegramToken"].is<const char*>()) strlcpy(s.telegramToken, obj["telegramToken"], sizeof(s.telegramToken));

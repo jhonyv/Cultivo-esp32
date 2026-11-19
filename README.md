@@ -39,6 +39,14 @@ La página está en `web/index.html`; al compilar, `tools/embed_web.py` la compr
 
 La configuración (nombres, tipos y modo de cada relé, offset de hoja para el VPD, clave del AP, zona horaria) queda guardada en la memoria flash y sobrevive a cortes de luz. Los relés arrancan siempre apagados hasta leer la config.
 
+## Sin internet o sin router
+
+Todo lo que es automático (luces, clima, riego, historial) corre en el ESP32 y no necesita internet; la hora la mantiene el DS3231.
+
+- **Sin internet pero con el WiFi de casa andando:** con el celular en ese WiFi, entrá a `http://cultivo.local` o a la IP que muestra Ajustes.
+- **Sin router:** el equipo levanta su red propia **Cultivo-XXXX** (aparece sola hasta 1 min después de caerse el WiFi). Conectá el celular, con la clave `cultivo123` salvo que la hayas cambiado, y abrí **192.168.4.1**: es el mismo panel completo.
+- En Ajustes > Equipo, **Red propia del equipo: Siempre prendida** la deja disponible todo el tiempo, aunque haya WiFi. Mientras haya un celular conectado a la red propia y no haya WiFi de casa, el equipo reintenta conectarse cada 5 min en vez de cada 1, para no cortarte.
+
 ## Acceso desde cualquier lado
 
 - **Telegram (recomendado):** en Ajustes > Telegram cargás el token de un bot creado con @BotFather y tu chat id. Desde cualquier lado: `/estado`, `/luces on|off|auto`, `/rele N on|off|auto`, `/regar N SEG`. Avisa si la temperatura o la humedad se van de rango más de 10 min, si falla el sensor o si el equipo se reinició (corte de luz). No hace falta tocar el router.

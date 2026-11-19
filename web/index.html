@@ -122,7 +122,9 @@ canvas{width:100%;height:190px;display:block}
 <div class="card"><h3>Equipo</h3>
 <div class="row"><label>Offset de hoja para VPD (°C)<input id="leaf" type="number" step="0.1"></label>
 <label>Módulo de relés<select id="alow"><option value="1">Activo en bajo (común)</option><option value="0">Activo en alto</option></select></label></div>
-<div class="row"><label>Clave de la red Cultivo (vacía = abierta)<input id="appw"></label><label>Zona horaria (POSIX)<input id="tz"></label></div>
+<div class="row"><label>Red propia del equipo<select id="apal"><option value="0">Solo si no hay WiFi</option><option value="1">Siempre prendida</option></select></label><label>Clave de la red propia (vacía = abierta)<input id="appw"></label></div>
+<div class="mut">Sin router o sin internet: conectá el celular a la red <b id="apName">Cultivo-XXXX</b> y abrí <b>192.168.4.1</b>. Con "Solo si no hay WiFi" aparece sola cuando se cae el WiFi de casa (tarda hasta 1 min).</div>
+<div class="row"><label>Zona horaria (POSIX)<input id="tz"></label></div>
 <div class="actions"><button class="btn" onclick="saveDevice()">Guardar</button><button class="btn sec" onclick="syncTime()">Usar hora del celular</button><button class="btn sec" onclick="restart()">Reiniciar</button></div></div>
 <div class="card local-only"><h3>Nube: el panel desde cualquier lado</h3>
 <details class="tip" style="margin:8px 0"><summary>Cómo configurarlo (5 minutos, gratis)</summary><ol style="margin:8px 0;padding-left:20px;line-height:1.5">
@@ -346,20 +348,20 @@ async function pulse(i,s){S=await call('/api/relay',{id:i,pulse:s===undefined?+$
 function refreshStates(p,status){S.relays.forEach((r,i)=>{const c=$(p+i);if(!c)return;c.querySelector('.dot').classList.toggle('on',r.on);c.querySelector('[data-st]').innerHTML=status(r);c.querySelector('.seg').outerHTML=seg(i,r.mode)})}
 
 function renderSettings(){
- const w=S.wifi;$('wst').textContent=w.connected?`Conectado a ${w.ssid} · IP ${w.ip} · ${w.rssi} dBm`:(w.ssid?`Sin conexión a ${w.ssid}`:'Sin red configurada')+(w.ap?` · red "${w.apSsid}" activa`:'');
+ const w=S.wifi;$('wst').textContent=(w.connected?`Conectado a ${w.ssid} · IP ${w.ip} · ${w.rssi} dBm`:(w.ssid?`Sin conexión a ${w.ssid}`:'Sin red configurada'))+(w.ap?` · red propia "${w.apSsid}" activa (192.168.4.1)`:'');
  if(dirty.has('ajustes'))return;
  $('mqSt').textContent=C.mqttHost?(S.wifi.cloud?'Conectado':'Sin conectar (revisá los datos)'):'Desactivada';$('devId').textContent=S.device||'--';
  $('cloudUrl').textContent=CLOUD_PANEL_URL;$('cloudUrl').href=CLOUD_PANEL_URL;
  $('mqHost').value=C.mqttHost||'';$('mqPort').value=C.mqttPort||8883;$('mqUser').value=C.mqttUser||'';$('mqPass').placeholder=C.mqttPassSet?'guardada (vacío = no cambiar)':'';
  $('tgSt').textContent=C.telegramTokenSet?'Bot activo':'Bot desactivado';$('pwSt').textContent=C.webPasswordSet?'Con contraseña':'Sin contraseña';
  $('tgToken').placeholder=C.telegramTokenSet?'guardado (vacío = no cambiar)':'123456789:AA...';$('tgChat').value=C.telegramChat;$('tgAlerts').checked=C.telegramAlerts;
- $('leaf').value=C.leafOffset;$('alow').value=C.relayActiveLow?1:0;$('appw').value=C.apPassword;$('tz').value=C.tz;
+ $('leaf').value=C.leafOffset;$('alow').value=C.relayActiveLow?1:0;$('appw').value=C.apPassword;$('apal').value=C.apAlways?1:0;$('apName').textContent=S.wifi.apSsid||'Cultivo-XXXX';$('tz').value=C.tz;
  $('cfgt').innerHTML=C.tents.map((t,k)=>`<div class="row"><label>Nombre carpa ${k+1}<input id="tn${k}" maxlength="23" value="${esc(t.name)}"></label>${k?`<label style="display:flex;gap:8px;align-items:center;color:var(--fg)"><input type="checkbox" id="te${k}" ${t.enabled?'checked':''}> Usar esta carpa</label>`:''}</div>`).join('');
  $('cfgr').innerHTML='<tr><th>#</th><th>Nombre</th><th>Función</th><th>Carpa</th></tr>'+C.relays.map((r,i)=>`<tr><td class="mut">${i+1}${S.relays[i].present?'':' <span class="bad" title="módulo no conectado">!</span>'}</td><td><input id="n${i}" maxlength="23" value="${esc(r.name)}"></td><td><select id="y${i}">${Object.entries(TYPES).map(([k,l])=>`<option value="${k}" ${k==r.type?'selected':''}>${l}</option>`).join('')}</select></td><td><select id="rt${i}">${C.tents.map((t,k)=>`<option value="${k}" ${k==r.tent?'selected':''}>${k+1}</option>`).join('')}</select></td></tr>`).join('');
 }
 async function saveDevice(){const relays=C.relays.map((_,i)=>({name:$('n'+i).value,type:$('y'+i).value,tent:+$('rt'+i).value}));
  const tents=C.tents.map((_,k)=>k?{name:$('tn'+k).value,enabled:$('te'+k).checked}:{name:$('tn'+k).value});
- C=await call('/api/config',{relays,tents,leafOffset:+$('leaf').value,relayActiveLow:$('alow').value=='1',apPassword:$('appw').value,tz:$('tz').value},'Ajustes guardados');dirty.delete('ajustes');await refresh()}
+ C=await call('/api/config',{relays,tents,leafOffset:+$('leaf').value,relayActiveLow:$('alow').value=='1',apPassword:$('appw').value,apAlways:$('apal').value=='1',tz:$('tz').value},'Ajustes guardados');dirty.delete('ajustes');await refresh()}
 async function saveCloud(off){const b=off?{mqttHost:''}:{mqttHost:$('mqHost').value.trim(),mqttPort:+$('mqPort').value||8883,mqttUser:$('mqUser').value.trim()};
  if(!off&&$('mqPass').value)b.mqttPass=$('mqPass').value;
  C=await call('/api/config',b,off?'Nube desactivada':'Nube guardada, conectando…');$('mqPass').value='';dirty.delete('ajustes');renderSettings()}
