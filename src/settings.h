@@ -70,11 +70,13 @@ struct RelayConfig {
 struct ClimateTargets {
   float tempMin, tempMax;  // °C
   float humMin, humMax;    // %HR
+  float vpdMin, vpdMax;    // kPa, usados con vpdControl
 };
 
 struct ClimateConfig {
   ClimateTargets day, night;  // día = alguna luz encendida
   float tempHyst, humHyst;
+  bool vpdControl;  // humidificador/deshumidificador (y coolers por humedad) siguen el VPD en vez del rango de humedad
   uint16_t ventOnMin, ventEveryMin;  // renovación de aire: extractor X min cada Y min (0 = desactivado)
 };
 

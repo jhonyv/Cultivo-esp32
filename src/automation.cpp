@@ -11,6 +11,7 @@ static bool isDay[NUM_TENTS] = {true, true};
 static uint32_t lastRun = 0;
 
 // Estados con histéresis por carpa, para no prender y apagar a cada rato cerca del límite.
+static const float VPD_HYST = 0.05f;  // kPa
 static bool hot[NUM_TENTS], cold[NUM_TENTS], humHigh[NUM_TENTS], humLow[NUM_TENTS];
 
 static void hysteresis(bool& state, bool turnOn, bool turnOff) {
@@ -92,8 +93,14 @@ static void updateClimate(time_t now, bool clockOk) {
     if (c.valid) {
       hysteresis(hot[t], c.temperature > tg.tempMax, c.temperature < tg.tempMax - cfg.tempHyst);
       hysteresis(cold[t], c.temperature < tg.tempMin, c.temperature > tg.tempMin + cfg.tempHyst);
-      hysteresis(humHigh[t], c.humidity > tg.humMax, c.humidity < tg.humMax - cfg.humHyst);
-      hysteresis(humLow[t], c.humidity < tg.humMin, c.humidity > tg.humMin + cfg.humHyst);
+      if (cfg.vpdControl) {
+        // VPD bajo = aire muy húmedo para esa temperatura; VPD alto = aire muy seco.
+        hysteresis(humHigh[t], c.vpd < tg.vpdMin, c.vpd > tg.vpdMin + VPD_HYST);
+        hysteresis(humLow[t], c.vpd > tg.vpdMax, c.vpd < tg.vpdMax - VPD_HYST);
+      } else {
+        hysteresis(humHigh[t], c.humidity > tg.humMax, c.humidity < tg.humMax - cfg.humHyst);
+        hysteresis(humLow[t], c.humidity < tg.humMin, c.humidity > tg.humMin + cfg.humHyst);
+      }
     }
     if (cfg.ventOnMin && cfg.ventEveryMin) {
       uint32_t minutes = clockOk ? now / 60 : millis() / 60000;
@@ -106,6 +113,7 @@ static void updateClimate(time_t now, bool clockOk) {
     const char* why = nullptr;
     uint8_t t = settings.relays[i].tent;
     const Climate& c = climate(t);
+    bool vpdMode = settings.tents[t].climate.vpdControl;
     switch (settings.relays[i].type) {
       case RelayType::FanOut:
       case RelayType::FanIn:
@@ -115,17 +123,17 @@ static void updateClimate(time_t now, bool clockOk) {
           why = !clockOk ? "sin hora: ventilando" : on ? "horario: prendido" : "horario: apagado";
         } else if (!c.valid) on = true, why = "sin sensor: ventilando";
         else if (hot[t]) on = true, why = "temperatura alta";
-        else if (humHigh[t]) on = true, why = "humedad alta";
+        else if (humHigh[t]) on = true, why = vpdMode ? "VPD bajo (humedad alta)" : "humedad alta";
         else if (vent[t]) on = true, why = "renovación de aire";
         else why = "clima en rango";
         break;
       case RelayType::Humidifier:
         on = c.valid && humLow[t];
-        why = !c.valid ? "sin sensor" : on ? "humedad baja" : "humedad en rango";
+        why = !c.valid ? "sin sensor" : on ? (vpdMode ? "VPD alto (aire seco)" : "humedad baja") : (vpdMode ? "VPD en rango" : "humedad en rango");
         break;
       case RelayType::Dehumidifier:
         on = c.valid && humHigh[t];
-        why = !c.valid ? "sin sensor" : on ? "humedad alta" : "humedad en rango";
+        why = !c.valid ? "sin sensor" : on ? (vpdMode ? "VPD bajo (aire húmedo)" : "humedad alta") : (vpdMode ? "VPD en rango" : "humedad en rango");
         break;
       case RelayType::AirConditioner:  // normalmente en la sala: el intractor mete ese aire frío a la carpa
         on = c.valid && hot[t];

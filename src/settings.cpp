@@ -88,8 +88,9 @@ static void settingsDefaults() {
     TentConfig& tc = settings.tents[t];
     snprintf(tc.name, sizeof(tc.name), "Carpa %u", t + 1);
     tc.enabled = t == 0;
-    tc.climate.day = {22, 28, 55, 70};
-    tc.climate.night = {18, 24, 50, 70};
+    tc.climate.day = {22, 28, 55, 70, 0.8f, 1.2f};
+    tc.climate.night = {18, 24, 50, 70, 0.6f, 1.0f};
+    tc.climate.vpdControl = false;
     tc.climate.tempHyst = 0.5f;
     tc.climate.humHyst = 3.0f;
     tc.climate.ventOnMin = 5;
@@ -129,6 +130,8 @@ static void targetsToJson(const ClimateTargets& t, JsonObject o) {
   o["tMax"] = t.tempMax;
   o["hMin"] = t.humMin;
   o["hMax"] = t.humMax;
+  o["vMin"] = t.vpdMin;
+  o["vMax"] = t.vpdMax;
 }
 
 static bool targetsFromJson(JsonObjectConst o, ClimateTargets& t, String& error) {
@@ -138,9 +141,11 @@ static bool targetsFromJson(JsonObjectConst o, ClimateTargets& t, String& error)
   if (o["tMax"].is<float>()) n.tempMax = o["tMax"];
   if (o["hMin"].is<float>()) n.humMin = o["hMin"];
   if (o["hMax"].is<float>()) n.humMax = o["hMax"];
+  if (o["vMin"].is<float>()) n.vpdMin = o["vMin"];
+  if (o["vMax"].is<float>()) n.vpdMax = o["vMax"];
   if (n.tempMin < 0 || n.tempMax > 45 || n.tempMin >= n.tempMax || n.humMin < 0 || n.humMax > 100 ||
-      n.humMin >= n.humMax) {
-    error = "Rangos de temperatura/humedad inválidos";
+      n.humMin >= n.humMax || n.vpdMin < 0.1f || n.vpdMax > 3 || n.vpdMin >= n.vpdMax) {
+    error = "Rangos de temperatura/humedad/VPD inválidos";
     return false;
   }
   t = n;
@@ -275,6 +280,7 @@ static void climateToJson(const ClimateConfig& cfg, JsonObject c) {
   targetsToJson(cfg.night, c["night"].to<JsonObject>());
   c["tempHyst"] = cfg.tempHyst;
   c["humHyst"] = cfg.humHyst;
+  c["vpdControl"] = cfg.vpdControl;
   c["ventOn"] = cfg.ventOnMin;
   c["ventEvery"] = cfg.ventEveryMin;
 }
@@ -284,6 +290,7 @@ static bool climateFromJson(JsonObjectConst c, ClimateConfig& cfg, String& error
   if (!targetsFromJson(c["day"], cfg.day, error) || !targetsFromJson(c["night"], cfg.night, error)) return false;
   if (c["tempHyst"].is<float>()) cfg.tempHyst = constrain(c["tempHyst"].as<float>(), 0.1f, 5.0f);
   if (c["humHyst"].is<float>()) cfg.humHyst = constrain(c["humHyst"].as<float>(), 0.5f, 20.0f);
+  if (c["vpdControl"].is<bool>()) cfg.vpdControl = c["vpdControl"];
   if (c["ventOn"].is<int>()) cfg.ventOnMin = constrain(c["ventOn"].as<int>(), 0, 1440);
   if (c["ventEvery"].is<int>()) cfg.ventEveryMin = constrain(c["ventEvery"].as<int>(), 0, 1440);
   return true;
