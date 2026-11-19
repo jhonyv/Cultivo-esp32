@@ -8,6 +8,8 @@
 #include "relays.h"
 #include "sensors.h"
 #include "settings.h"
+#include "soil.h"
+#include "tank.h"
 
 struct Command {
   uint8_t relay;
@@ -28,13 +30,18 @@ struct Alert {
   bool sent;
 };
 
-static Alert alerts[] = {
+static const uint8_t NUM_ALERTS = 8;
+static const Alert ALERT_TEXTS[NUM_ALERTS] = {
     {"🔥 Temperatura alta", "✅ Temperatura normal otra vez", 0, false},
     {"🥶 Temperatura baja", "✅ Temperatura normal otra vez", 0, false},
-    {"💦 Humedad muy alta", "✅ Humedad normal otra vez", 0, false},
-    {"🏜️ Humedad muy baja", "✅ Humedad normal otra vez", 0, false},
-    {"⚠️ El sensor de temperatura/humedad no responde", "✅ El sensor volvió a responder", 0, false},
+    {"💦 Aire muy húmedo (VPD muy bajo)", "✅ VPD normal otra vez", 0, false},
+    {"🏜️ Aire muy seco (VPD muy alto)", "✅ VPD normal otra vez", 0, false},
+    {"⚠️ Los sensores de temperatura/humedad no responden", "✅ Los sensores volvieron a responder", 0, false},
+    {"⚠️ Los sensores de suelo no responden", "✅ Los sensores de suelo volvieron a responder", 0, false},
+    {"🛢️ Tanque bajo", "✅ Tanque cargado otra vez", 0, false},
+    {"⚠️ El sensor del tanque no responde", "✅ El sensor del tanque volvió a responder", 0, false},
 };
+static Alert alerts[NUM_TENTS][NUM_ALERTS];
 
 static String apiUrl(const char* method) { return String("https://api.telegram.org/bot") + settings.telegramToken + "/" + method; }
 
@@ -54,25 +61,38 @@ static bool send(const String& chat, const String& text) {
 
 static String statusText() {
   String s;
-  const Climate& c = climate();
-  if (c.valid) {
-    s += "🌡 " + String(c.temperature, 1) + " °C   💧 " + String(c.humidity, 0) + " %   VPD " + String(c.vpd, 2) + " kPa\n";
-  } else {
-    s += "⚠️ Sin lectura del sensor\n";
-  }
-  s += automationIsDay() ? "☀️ Día" : "🌙 Noche";
   if (clockValid()) {
     time_t now = time(nullptr);
     struct tm tm;
     localtime_r(&now, &tm);
     char buf[8];
     strftime(buf, sizeof(buf), "%H:%M", &tm);
-    s += String(" · ") + buf;
+    s += String("🕒 ") + buf + "\n";
   }
-  s += "\n\n";
-  for (uint8_t i = 0; i < NUM_RELAYS; i++) {
-    const RelayConfig& r = settings.relays[i];
-    s += String(i + 1) + ". " + (relayState(i) ? "🟢 " : "⚫ ") + r.name + " (" + relayModeName(r.mode) + ")\n";
+  for (uint8_t t = 0; t < NUM_TENTS; t++) {
+    if (!settings.tents[t].enabled) continue;
+    const Climate& c = climate(t);
+    s += String("\n🌱 ") + settings.tents[t].name + (automationIsDay(t) ? " · ☀️ Día\n" : " · 🌙 Noche\n");
+    if (c.valid) {
+      s += "🌡 " + String(c.temperature, 1) + " °C   💧 " + String(c.humidity, 0) + " %   VPD " + String(c.vpd, 2) + " kPa\n";
+    } else {
+      s += "⚠️ Sin lectura de los sensores\n";
+    }
+    if (settings.tents[t].soil.enabled) {
+      const SoilReading& so = soil(t);
+      if (so.valid) s += "🪴 Suelo " + String(so.percent, 0) + " %\n";
+      else s += "⚠️ Sin lectura de suelo\n";
+    }
+    if (settings.tents[t].tank.enabled) {
+      const TankReading& k = tank(t);
+      if (k.valid) s += "🛢️ Tanque " + String(k.percent, 0) + " % (" + String(k.liters, 0) + " l)\n";
+      else s += "⚠️ Sin lectura del tanque\n";
+    }
+    for (uint8_t i = 0; i < NUM_RELAYS; i++) {
+      const RelayConfig& r = settings.relays[i];
+      if (r.tent != t) continue;
+      s += String(i + 1) + ". " + (relayState(i) ? "🟢 " : "⚫ ") + r.name + " (" + relayModeName(r.mode) + ")\n";
+    }
   }
   return s;
 }
@@ -81,7 +101,7 @@ static const char* HELP =
     "Comandos:\n"
     "/estado – lecturas y relés\n"
     "/luces on|off|auto – todas las luces\n"
-    "/rele N on|off|auto – un relé (1 a 8)\n"
+    "/rele N on|off|auto – un relé (1 a 16)\n"
     "/regar N SEG – prende el relé N esos segundos\n"
     "/ayuda – esta ayuda";
 
@@ -177,26 +197,35 @@ static void poll() {
 
 static void checkAlerts() {
   if (!settings.telegramAlerts || !settings.telegramChat[0]) return;
-  const Climate& c = climate();
-  const ClimateTargets& t = automationIsDay() ? settings.climate.day : settings.climate.night;
-  bool active[] = {
-      c.valid && c.temperature > t.tempMax + 2,
-      c.valid && c.temperature < t.tempMin - 2,
-      c.valid && c.humidity > t.humMax + 10,
-      c.valid && c.humidity < t.humMin - 10,
-      !c.valid,
-  };
-  for (uint8_t i = 0; i < sizeof(alerts) / sizeof(alerts[0]); i++) {
-    Alert& a = alerts[i];
-    if (!active[i]) {
-      if (a.sent) send(settings.telegramChat, String(a.off) + "\n\n" + statusText());
-      a.since = 0;
-      a.sent = false;
-      continue;
-    }
-    if (!a.since) a.since = millis();
-    if (!a.sent && millis() - a.since > ALERT_DELAY_MS) {
-      a.sent = send(settings.telegramChat, String(a.on) + "\n\n" + statusText());
+  for (uint8_t tent = 0; tent < NUM_TENTS; tent++) {
+    if (!settings.tents[tent].enabled) continue;
+    const Climate& c = climate(tent);
+    const ClimateConfig& cfg = settings.tents[tent].climate;
+    const TankConfig& tk = settings.tents[tent].tank;
+    const ClimateTargets& t = automationIsDay(tent) ? cfg.day : cfg.night;
+    bool active[NUM_ALERTS] = {
+        c.valid && c.temperature > t.tempMax + 2,
+        c.valid && c.temperature < t.tempMin - 2,
+        c.valid && c.vpd < t.vpdMin - 0.3f,
+        c.valid && c.vpd > t.vpdMax + 0.4f,
+        !c.valid,
+        settings.tents[tent].soil.enabled && !soil(tent).valid,
+        tk.enabled && tk.alertPct && tank(tent).valid && tank(tent).percent < tk.alertPct,
+        tk.enabled && !tank(tent).valid,
+    };
+    String prefix = String(settings.tents[tent].name) + ": ";
+    for (uint8_t i = 0; i < NUM_ALERTS; i++) {
+      Alert& a = alerts[tent][i];
+      if (!active[i]) {
+        if (a.sent) send(settings.telegramChat, prefix + ALERT_TEXTS[i].off + "\n" + statusText());
+        a.since = 0;
+        a.sent = false;
+        continue;
+      }
+      if (!a.since) a.since = millis();
+      if (!a.sent && millis() - a.since > ALERT_DELAY_MS) {
+        a.sent = send(settings.telegramChat, prefix + ALERT_TEXTS[i].on + "\n" + statusText());
+      }
     }
   }
 }

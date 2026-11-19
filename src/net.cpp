@@ -14,6 +14,7 @@ static uint32_t connectStart = 0;  // 0 = no hay intento en curso
 static uint32_t lastAttempt = 0;
 static uint32_t connectedSince = 0;
 static uint32_t buttonDown = 0;
+static char apPwApplied[sizeof(settings.apPassword)];
 
 static void loadCredentials() {
   Preferences prefs;
@@ -28,6 +29,7 @@ static void startAp() {
   WiFi.mode(WIFI_AP_STA);
   const char* pw = strlen(settings.apPassword) >= 8 ? settings.apPassword : nullptr;
   WiFi.softAP(apSsid.c_str(), pw);
+  strlcpy(apPwApplied, settings.apPassword, sizeof(apPwApplied));
   dns.start(53, "*", WiFi.softAPIP());
   apActive = true;
   Serial.printf("[wifi] AP \"%s\" activo en %s\n", apSsid.c_str(), WiFi.softAPIP().toString().c_str());
@@ -64,12 +66,9 @@ void netBegin() {
   WiFi.setAutoReconnect(true);
   loadCredentials();
 
-  if (ssid.isEmpty()) {
-    startAp();
-  } else {
-    WiFi.mode(WIFI_STA);
-    startConnect();
-  }
+  if (ssid.isEmpty() || settings.apAlways) startAp();
+  else WiFi.mode(WIFI_STA);
+  startConnect();
   if (MDNS.begin(HOSTNAME)) MDNS.addService("http", "tcp", 80);
 }
 
@@ -107,11 +106,24 @@ void netLoop() {
   }
   connected = nowConnected;
 
+  // Cambios desde la página: red propia siempre prendida o clave nueva.
+  if (apActive && strcmp(apPwApplied, settings.apPassword) != 0) {
+    stopAp();
+    startAp();
+  }
+  if (settings.apAlways && !apActive) startAp();
+
   if (connected) {
-    // Dejar el AP un rato para que el portal muestre la IP nueva y después apagarlo.
-    if (apActive && millis() - connectedSince > AP_OFF_DELAY_MS) stopAp();
+    // Dejar el AP un rato para que el portal muestre la IP nueva y después apagarlo (salvo que esté fijo).
+    if (apActive && !settings.apAlways && millis() - connectedSince > AP_OFF_DELAY_MS) stopAp();
+    WiFi.setAutoReconnect(true);
     return;
   }
+
+  // Sin WiFi de casa y con el celular conectado a la red propia: no reintentar seguido,
+  // porque cada intento cambia de canal y corta la conexión del celular.
+  bool apClients = apActive && WiFi.softAPgetStationNum() > 0;
+  WiFi.setAutoReconnect(!apClients);
 
   if (connectStart && millis() - connectStart > WIFI_CONNECT_TIMEOUT_MS) {
     Serial.println("[wifi] no se pudo conectar");
@@ -119,7 +131,7 @@ void netLoop() {
     startAp();
   }
   // Si estamos sin red (y no hay intento en curso), reintentar periódicamente.
-  if (!connectStart && !ssid.isEmpty() && millis() - lastAttempt > WIFI_RETRY_MS) {
+  if (!connectStart && !ssid.isEmpty() && millis() - lastAttempt > (apClients ? WIFI_RETRY_AP_CLIENT_MS : WIFI_RETRY_MS)) {
     if (!apActive) startAp();
     startConnect();
   }

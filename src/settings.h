@@ -2,7 +2,8 @@
 #include <ArduinoJson.h>
 #include "config.h"
 
-#define MAX_IRRIGATION_EVENTS 8
+#define MAX_IRRIGATION_EVENTS 12  // el plan por etapa usa varios riegos chicos (P1) más los de mantenimiento (P2)
+#define MAX_FAN_WINDOWS 4
 
 enum class RelayType : uint8_t {
   Generic,
@@ -13,6 +14,7 @@ enum class RelayType : uint8_t {
   Humidifier,
   Dehumidifier,
   Heater,
+  AirConditioner,  // se prende con temperatura alta
 };
 
 enum class RelayMode : uint8_t { Off, On, Auto };
@@ -31,32 +33,92 @@ struct IrrigationEvent {
   bool enabled;
 };
 
+// Cómo maneja Auto a un extractor/intractor.
+enum class FanMode : uint8_t {
+  Climate,   // por temperatura, humedad y renovación
+  Schedule,  // prendido en las franjas horarias
+  Always,    // permanente (24/7)
+};
+
+struct FanWindow {
+  uint16_t startMin, endMin;  // minuto del día (hora local); si end < start cruza la medianoche
+  bool enabled;
+};
+
+// Riego según humedad de suelo (0 = opción apagada). Solo actúa si la carpa tiene lectura de suelo.
+struct IrrigationSoil {
+  uint8_t skipAbove;  // % : saltear un riego programado si la tierra está por encima
+  uint8_t waterBelow; // % : regar fuera de horario si baja de esto (solo con luces prendidas)
+  uint16_t durSec;    // duración de ese riego extra
+  uint8_t maxPerDay;  // tope de riegos extra por día
+};
+
+// Datos de la bomba y las macetas que usa la página para armar el plan de riego por etapa.
+struct IrrigationPlan {
+  uint16_t flowMlMin;  // caudal total de la bomba (ml/min), 0 = sin calibrar
+  uint8_t pots;        // macetas regadas por esta bomba
+  uint8_t potLiters;   // litros de cada maceta
+};
+
 struct RelayConfig {
   char name[24];
+  uint8_t tent;  // carpa a la que pertenece (0 o 1)
   RelayType type;
   RelayMode mode;
   LightSchedule light;  // usado si type == Light
   uint8_t eventCount;   // usado si type == Irrigation
   IrrigationEvent events[MAX_IRRIGATION_EVENTS];
+  IrrigationSoil soil;  // usado si type == Irrigation y la carpa tiene sensores de suelo
+  IrrigationPlan plan;
+  FanMode fanMode;      // usados si type == FanIn/FanOut
+  uint8_t fanWindowCount;
+  FanWindow fanWindows[MAX_FAN_WINDOWS];
 };
 
 struct ClimateTargets {
   float tempMin, tempMax;  // °C
-  float humMin, humMax;    // %HR
+  float vpdMin, vpdMax;    // kPa (de hoja): la humedad se maneja por VPD
 };
 
 struct ClimateConfig {
   ClimateTargets day, night;  // día = alguna luz encendida
-  float tempHyst, humHyst;
+  float tempHyst;
   uint16_t ventOnMin, ventEveryMin;  // renovación de aire: extractor X min cada Y min (0 = desactivado)
+};
+
+// Sensores capacitivos de suelo (opcional). Calibración en cuentas del ADS1115.
+struct SoilConfig {
+  bool enabled;
+  uint8_t count;  // sensores conectados en A0..A(count-1)
+  uint16_t dry;   // lectura al aire (0 %)
+  uint16_t wet;   // lectura en un vaso de agua (100 %)
+};
+
+// Tanque de riego con sensor ultrasónico en la tapa (opcional).
+struct TankConfig {
+  bool enabled;
+  uint16_t emptyCm;  // distancia del sensor al agua con el tanque vacío (al fondo)
+  uint16_t fullCm;   // distancia del sensor al agua con el tanque lleno
+  uint16_t liters;   // capacidad, para mostrar litros
+  uint8_t alertPct;  // avisar por Telegram debajo de esto (0 = no)
+  uint8_t cutPct;    // no prender la bomba debajo de esto (0 = no)
+};
+
+struct TentConfig {
+  char name[24];
+  bool enabled;
+  ClimateConfig climate;
+  SoilConfig soil;
+  TankConfig tank;
 };
 
 struct Settings {
   RelayConfig relays[NUM_RELAYS];
-  ClimateConfig climate;
+  TentConfig tents[NUM_TENTS];
   bool relayActiveLow;
   float leafOffset;  // °C, temperatura de hoja respecto del aire (para VPD)
   char apPassword[33];
+  bool apAlways;  // red propia "Cultivo-XXXX" siempre prendida, no solo cuando falla el WiFi
   char tz[48];
   char webPassword[33];     // vacía = página sin contraseña (usuario "cultivo")
   char telegramToken[64];   // token del bot de @BotFather, vacío = bot apagado
