@@ -73,10 +73,6 @@ static void updateLights(time_t now, bool clockOk) {
 
 static void updateClimate(time_t now, bool clockOk) {
   bool vent[NUM_TENTS] = {};
-  // Con aire acondicionado en la carpa, el calor lo maneja el aire: los coolers no sacan el aire frío.
-  bool hasAc[NUM_TENTS] = {};
-  for (uint8_t i = 0; i < NUM_RELAYS; i++)
-    if (settings.relays[i].type == RelayType::AirConditioner && settings.relays[i].mode != RelayMode::Off) hasAc[settings.relays[i].tent] = true;
   for (uint8_t t = 0; t < NUM_TENTS; t++) {
     const Climate& c = climate(t);
     const ClimateConfig& cfg = settings.tents[t].climate;
@@ -102,7 +98,7 @@ static void updateClimate(time_t now, bool clockOk) {
       case RelayType::FanOut:
       case RelayType::FanIn:
         if (!c.valid) on = true, why = "sin sensor: ventilando";
-        else if (hot[t] && !hasAc[t]) on = true, why = "temperatura alta";
+        else if (hot[t]) on = true, why = "temperatura alta";
         else if (humHigh[t]) on = true, why = "humedad alta";
         else if (vent[t]) on = true, why = "renovación de aire";
         else why = "clima en rango";
@@ -115,7 +111,7 @@ static void updateClimate(time_t now, bool clockOk) {
         on = c.valid && humHigh[t];
         why = !c.valid ? "sin sensor" : on ? "humedad alta" : "humedad en rango";
         break;
-      case RelayType::AirConditioner:
+      case RelayType::AirConditioner:  // normalmente en la sala: el intractor mete ese aire frío a la carpa
         on = c.valid && hot[t];
         why = !c.valid ? "sin sensor" : on ? "temperatura alta" : "temperatura en rango";
         break;
