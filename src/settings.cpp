@@ -69,6 +69,7 @@ static void setRelay(uint8_t i, const char* name, RelayType type) {
   r.light = {18 * 60, 6 * 60, anchorFromStart(6 * 60)};
   r.eventCount = 0;
   r.soil = {0, 0, 60, 3};
+  r.plan = {0, 4, 11};
   // Lo común: extractor 24/7 y el intractor solo cuando hace falta (calor o humedad).
   r.fanMode = type == RelayType::FanOut ? FanMode::Always : FanMode::Climate;
   r.fanWindowCount = 0;
@@ -295,6 +296,19 @@ static void irrigationSoilToJson(const IrrigationSoil& s, JsonObject o) {
   o["max"] = s.maxPerDay;
 }
 
+static void planToJson(const IrrigationPlan& p, JsonObject o) {
+  o["flow"] = p.flowMlMin;
+  o["pots"] = p.pots;
+  o["potL"] = p.potLiters;
+}
+
+static void planFromJson(JsonObjectConst o, IrrigationPlan& p) {
+  if (o.isNull()) return;
+  if (o["flow"].is<int>()) p.flowMlMin = constrain(o["flow"].as<int>(), 0, 60000);
+  if (o["pots"].is<int>()) p.pots = constrain(o["pots"].as<int>(), 1, 50);
+  if (o["potL"].is<int>()) p.potLiters = constrain(o["potL"].as<int>(), 1, 200);
+}
+
 static void irrigationSoilFromJson(JsonObjectConst o, IrrigationSoil& s) {
   if (o.isNull()) return;
   if (o["skip"].is<int>()) s.skipAbove = constrain(o["skip"].as<int>(), 0, 100);
@@ -359,6 +373,7 @@ void settingsToJson(JsonObject obj, bool secrets) {
       o["en"] = x.enabled;
     }
     irrigationSoilToJson(settings.relays[i].soil, r["soil"].to<JsonObject>());
+    planToJson(settings.relays[i].plan, r["plan"].to<JsonObject>());
     fanToJson(settings.relays[i], r["fan"].to<JsonObject>());
   }
   JsonArray tents = obj["tents"].to<JsonArray>();
@@ -431,6 +446,7 @@ bool settingsFromJson(JsonObjectConst obj, String& error) {
       return false;
     }
     irrigationSoilFromJson(r["soil"], s.relays[i].soil);
+    planFromJson(r["plan"], s.relays[i].plan);
     if (!fanFromJson(r["fan"], s.relays[i], error)) {
       error = String("Relé ") + (i + 1) + ": " + error;
       return false;

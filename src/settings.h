@@ -2,7 +2,7 @@
 #include <ArduinoJson.h>
 #include "config.h"
 
-#define MAX_IRRIGATION_EVENTS 8
+#define MAX_IRRIGATION_EVENTS 12  // el plan por etapa usa varios riegos chicos (P1) más los de mantenimiento (P2)
 #define MAX_FAN_WINDOWS 4
 
 enum class RelayType : uint8_t {
@@ -53,6 +53,13 @@ struct IrrigationSoil {
   uint8_t maxPerDay;  // tope de riegos extra por día
 };
 
+// Datos de la bomba y las macetas que usa la página para armar el plan de riego por etapa.
+struct IrrigationPlan {
+  uint16_t flowMlMin;  // caudal total de la bomba (ml/min), 0 = sin calibrar
+  uint8_t pots;        // macetas regadas por esta bomba
+  uint8_t potLiters;   // litros de cada maceta
+};
+
 struct RelayConfig {
   char name[24];
   uint8_t tent;  // carpa a la que pertenece (0 o 1)
@@ -62,6 +69,7 @@ struct RelayConfig {
   uint8_t eventCount;   // usado si type == Irrigation
   IrrigationEvent events[MAX_IRRIGATION_EVENTS];
   IrrigationSoil soil;  // usado si type == Irrigation y la carpa tiene sensores de suelo
+  IrrigationPlan plan;
   FanMode fanMode;      // usados si type == FanIn/FanOut
   uint8_t fanWindowCount;
   FanWindow fanWindows[MAX_FAN_WINDOWS];
