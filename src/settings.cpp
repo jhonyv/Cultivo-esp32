@@ -8,6 +8,7 @@ static const char* const TYPE_NAMES[] = {
     "generic", "light", "fan_in", "fan_out", "irrigation", "humidifier", "dehumidifier", "heater", "ac",
 };
 static const char* const MODE_NAMES[] = {"off", "on", "auto"};
+static const char* const FAN_MODE_NAMES[] = {"climate", "schedule", "always"};
 
 const char* relayTypeName(RelayType t) { return TYPE_NAMES[(uint8_t)t]; }
 const char* relayModeName(RelayMode m) { return MODE_NAMES[(uint8_t)m]; }
@@ -67,6 +68,8 @@ static void setRelay(uint8_t i, const char* name, RelayType type) {
   r.light = {18 * 60, 6 * 60, anchorFromStart(6 * 60)};
   r.eventCount = 0;
   r.soil = {0, 0, 60, 3};
+  r.fanMode = FanMode::Climate;
+  r.fanWindowCount = 0;
 }
 
 static void settingsDefaults() {
@@ -187,6 +190,51 @@ static bool eventsFromJson(JsonArrayConst arr, RelayConfig& r, String& error) {
   return true;
 }
 
+static void fanToJson(const RelayConfig& r, JsonObject o) {
+  o["mode"] = FAN_MODE_NAMES[(uint8_t)r.fanMode];
+  JsonArray arr = o["windows"].to<JsonArray>();
+  for (uint8_t k = 0; k < r.fanWindowCount; k++) {
+    char a[6], b[6];
+    formatHHMM(a, sizeof(a), r.fanWindows[k].startMin);
+    formatHHMM(b, sizeof(b), r.fanWindows[k].endMin);
+    JsonObject w = arr.add<JsonObject>();
+    w["start"] = a;
+    w["end"] = b;
+    w["en"] = r.fanWindows[k].enabled;
+  }
+}
+
+static bool fanFromJson(JsonObjectConst o, RelayConfig& r, String& error) {
+  if (o.isNull()) return true;
+  if (o["mode"].is<const char*>()) {
+    bool found = false;
+    for (uint8_t i = 0; i < 3; i++) {
+      if (strcmp(o["mode"].as<const char*>(), FAN_MODE_NAMES[i]) == 0) r.fanMode = (FanMode)i, found = true;
+    }
+    if (!found) {
+      error = "Modo de ventilación inválido";
+      return false;
+    }
+  }
+  JsonArrayConst arr = o["windows"];
+  if (arr.isNull()) return true;
+  if (arr.size() > MAX_FAN_WINDOWS) {
+    error = "Máximo " + String(MAX_FAN_WINDOWS) + " franjas por salida";
+    return false;
+  }
+  uint8_t n = 0;
+  for (JsonObjectConst w : arr) {
+    int a = parseHHMM(w["start"]), b = parseHHMM(w["end"]);
+    if (a < 0 || b < 0 || a == b) {
+      error = "Franja inválida (desde y hasta HH:MM, distintas)";
+      return false;
+    }
+    r.fanWindows[n++] = {(uint16_t)a, (uint16_t)b, w["en"] | true};
+  }
+  r.fanWindowCount = n;
+  return true;
+}
+
 static void soilToJson(const SoilConfig& c, JsonObject o) {
   o["enabled"] = c.enabled;
   o["count"] = c.count;
@@ -280,6 +328,7 @@ void settingsToJson(JsonObject obj, bool secrets) {
       o["en"] = x.enabled;
     }
     irrigationSoilToJson(settings.relays[i].soil, r["soil"].to<JsonObject>());
+    fanToJson(settings.relays[i], r["fan"].to<JsonObject>());
   }
   JsonArray tents = obj["tents"].to<JsonArray>();
   for (uint8_t t = 0; t < NUM_TENTS; t++) {
@@ -350,6 +399,10 @@ bool settingsFromJson(JsonObjectConst obj, String& error) {
       return false;
     }
     irrigationSoilFromJson(r["soil"], s.relays[i].soil);
+    if (!fanFromJson(r["fan"], s.relays[i], error)) {
+      error = String("Relé ") + (i + 1) + ": " + error;
+      return false;
+    }
   }
 
   // Config de antes de las 2 carpas: "climate" suelto es el de la carpa 1.

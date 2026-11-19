@@ -3,6 +3,7 @@
 #include "config.h"
 
 #define MAX_IRRIGATION_EVENTS 8
+#define MAX_FAN_WINDOWS 4
 
 enum class RelayType : uint8_t {
   Generic,
@@ -32,6 +33,18 @@ struct IrrigationEvent {
   bool enabled;
 };
 
+// Cómo maneja Auto a un extractor/intractor.
+enum class FanMode : uint8_t {
+  Climate,   // por temperatura, humedad y renovación
+  Schedule,  // prendido en las franjas horarias
+  Always,    // permanente (24/7)
+};
+
+struct FanWindow {
+  uint16_t startMin, endMin;  // minuto del día (hora local); si end < start cruza la medianoche
+  bool enabled;
+};
+
 // Riego según humedad de suelo (0 = opción apagada). Solo actúa si la carpa tiene lectura de suelo.
 struct IrrigationSoil {
   uint8_t skipAbove;  // % : saltear un riego programado si la tierra está por encima
@@ -49,6 +62,9 @@ struct RelayConfig {
   uint8_t eventCount;   // usado si type == Irrigation
   IrrigationEvent events[MAX_IRRIGATION_EVENTS];
   IrrigationSoil soil;  // usado si type == Irrigation y la carpa tiene sensores de suelo
+  FanMode fanMode;      // usados si type == FanIn/FanOut
+  uint8_t fanWindowCount;
+  FanWindow fanWindows[MAX_FAN_WINDOWS];
 };
 
 struct ClimateTargets {

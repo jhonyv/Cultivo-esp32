@@ -85,7 +85,7 @@ canvas{width:100%;height:190px;display:block}
 <div class="mut">Es cuánto tiene que volver el valor antes de apagar, para que los equipos no prendan y apaguen a cada rato cuando están justo en el límite (lo que en la jerga se llama <i>histéresis</i>). Ejemplo: máximo 28 °C y margen 0,5: el extractor prende al pasar los 28 °C y se apaga recién cuando baja de 27,5 °C. Con la humedad es igual: máximo 70 % y margen 3, prende arriba de 70 % y apaga debajo de 67 %.</div>
 <div class="row"><label>Renovación de aire: prender el extractor (min)<input id="ventOn" type="number" min="0"></label><label>cada (min)<input id="ventEvery" type="number" min="0"></label></div>
 <div class="mut">Aunque la temperatura y la humedad estén bien, las plantas consumen el CO₂ del aire: la renovación prende el extractor un rato cada tanto para meter aire nuevo. Ejemplo: 5 cada 30 = 5 minutos de extractor cada media hora. 0 la desactiva.</div></div>
-<div class="card"><h3 style="margin-bottom:6px">Ventilación</h3><div id="fans"></div></div>
+<div class="card"><h3>Ventilación</h3><div class="mut" style="margin-bottom:6px">Elegí cómo trabaja cada extractor/intractor en Auto: <b>Por clima</b> (prende con calor, humedad alta o renovación), <b>Por horario</b> (en las franjas que pongas) o <b>Permanente</b> (24/7, lo más común para el extractor).</div><div id="fans"></div></div>
 <div class="card"><h3>Salidas asignables</h3><div class="mut" style="margin-bottom:6px">Asignales humidificador, deshumidificador, calefactor o aire acondicionado y quedan atadas a los rangos de arriba. El aire acondicionado prende con temperatura alta junto con los coolers: si está en la sala, el intractor mete ese aire frío a la carpa.</div><div id="aux"></div></div>
 <div class="actions"><button class="btn" onclick="saveClimate()">Guardar clima</button></div></section>
 
@@ -309,10 +309,25 @@ function renderClimate(){
   $('targets').innerHTML=rangeInputs('day',cl.day)+'<div style="height:10px"></div>'+rangeInputs('night',cl.night);
   $('tHyst').value=cl.tempHyst;$('hHyst').value=cl.humHyst;$('ventOn').value=cl.ventOn;$('ventEvery').value=cl.ventEvery;vpdHint()}
  const F=idx(['fan_out','fan_in']);
- $('fans').innerHTML=F.length?F.map(([r,i])=>relayLine(r,i)).join(''):'<div class="empty">No hay extractor/intractor asignado.</div>';
+ if(dirty.has('clima'))refreshStates('F',fanStatus);
+ else $('fans').innerHTML=F.length?F.map(([r,i])=>fanBlock(r,i)).join(''):'<div class="empty">No hay extractor/intractor asignado.</div>';
  const A=idx(AUX);
  $('aux').innerHTML=A.length?A.map(([r,i])=>`${relayLine(r,i)}<div style="margin:0 0 8px 19px" data-nodirty><select onchange="setAux(${i},this.value)">${AUX.map(k=>`<option value="${k}" ${k==r.type?'selected':''}>${TYPES[k]}</option>`).join('')}</select></div>`).join(''):'<div class="empty">No hay salidas libres.</div>';
 }
+const FAN_MODES=[['climate','Por clima'],['schedule','Por horario'],['always','Permanente']];
+function fanStatus(r){return r.mode=='auto'?esc(r.reason||''):r.mode=='on'?'manual: encendido':'manual: apagado'}
+function fanBlock(r,i){const f=C.relays[i].fan;
+ return `<div id="F${i}" style="border-bottom:1px solid var(--line);padding:6px 0 10px"><div class="relay" style="border:0"><div><span class="dot ${r.on?'on':''}"></span><b>${esc(r.name)}</b> <span class="mut">${TYPES[r.type]}</span><div class="mut" style="margin-left:19px" data-st>${fanStatus(r)}</div></div>${seg(i,r.mode)}</div>
+ <div class="chips" data-nodirty style="margin:0 0 0 19px">${FAN_MODES.map(([k,l])=>`<button class="chip ${f.mode==k?'sel':''}" onclick="setFanMode(${i},'${k}')">${l}</button>`).join('')}</div>
+ ${f.mode=='schedule'?`<div style="margin-left:19px"><table style="margin-top:6px"><thead><tr><th>Desde</th><th>Hasta</th><th>Activa</th><th></th></tr></thead><tbody id="fw${i}">${f.windows.map(fwRow).join('')}</tbody></table>
+ <div class="actions"><button class="btn sec sm" data-dirty onclick="addFw(${i})">+ Agregar franja</button><button class="btn sm" onclick="saveFw(${i})">Guardar horario</button></div>
+ <div class="mut">Si "hasta" es menor que "desde", cruza la medianoche (ej. 22:00 a 06:00).</div></div>`:''}</div>`}
+function fwRow(w){return `<tr><td><input type="time" value="${w.start}" data-k="start"></td><td><input type="time" value="${w.end}" data-k="end"></td><td><input type="checkbox" ${w.en?'checked':''} data-k="en"></td><td><button class="btn sec sm" data-dirty onclick="this.closest('tr').remove()">✕</button></td></tr>`}
+function addFw(i){if($('fw'+i).children.length>=4)return toast('Máximo 4 franjas',true);$('fw'+i).insertAdjacentHTML('beforeend',fwRow({start:'08:00',end:'20:00',en:true}))}
+async function setFanMode(i,mode){C=await call('/api/config',{relays:relaysArr(i,{fan:{mode}})},'Ventilación: '+FAN_MODES.find(m=>m[0]==mode)[1]);
+ if(mode=='schedule'&&!C.relays[i].fan.windows.length)toast('Agregá las franjas y guardá');await refresh()}
+async function saveFw(i){const windows=[...$('fw'+i).querySelectorAll('tr')].map(tr=>{const q=k=>tr.querySelector(`[data-k=${k}]`);return {start:q('start').value,end:q('end').value,en:q('en').checked}});
+ C=await call('/api/config',{relays:relaysArr(i,{fan:{windows}})},'Horario guardado');dirty.delete('clima');await refresh()}
 function readT(k){const g=n=>parseFloat($(k+n).value);return {tMin:g('tMin'),tMax:g('tMax'),hMin:g('hMin'),hMax:g('hMax')}}
 function vpdHint(){['day','night'].forEach(k=>{const t=readT(k);$(k+'Vpd').textContent=`VPD resultante: ${vpd(t.tMin,t.hMax).toFixed(2)} a ${vpd(t.tMax,t.hMin).toFixed(2)} kPa`})}
 function setStage(s){const st=STAGES[s];['day','night'].forEach(k=>Object.entries(st[k]).forEach(([n,v])=>$(k+n).value=v));vpdHint();

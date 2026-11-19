@@ -71,6 +71,18 @@ static void updateLights(time_t now, bool clockOk) {
   for (uint8_t t = 0; t < NUM_TENTS; t++) isDay[t] = !anyLight[t] || anyOn[t];
 }
 
+static bool inFanWindow(const RelayConfig& r, time_t now) {
+  struct tm tm;
+  localtime_r(&now, &tm);
+  uint16_t m = tm.tm_hour * 60 + tm.tm_min;
+  for (uint8_t k = 0; k < r.fanWindowCount; k++) {
+    const FanWindow& w = r.fanWindows[k];
+    if (!w.enabled) continue;
+    if (w.startMin < w.endMin ? (m >= w.startMin && m < w.endMin) : (m >= w.startMin || m < w.endMin)) return true;
+  }
+  return false;
+}
+
 static void updateClimate(time_t now, bool clockOk) {
   bool vent[NUM_TENTS] = {};
   for (uint8_t t = 0; t < NUM_TENTS; t++) {
@@ -97,7 +109,11 @@ static void updateClimate(time_t now, bool clockOk) {
     switch (settings.relays[i].type) {
       case RelayType::FanOut:
       case RelayType::FanIn:
-        if (!c.valid) on = true, why = "sin sensor: ventilando";
+        if (settings.relays[i].fanMode == FanMode::Always) on = true, why = "permanente";
+        else if (settings.relays[i].fanMode == FanMode::Schedule) {
+          on = !clockOk || inFanWindow(settings.relays[i], now);
+          why = !clockOk ? "sin hora: ventilando" : on ? "horario: prendido" : "horario: apagado";
+        } else if (!c.valid) on = true, why = "sin sensor: ventilando";
         else if (hot[t]) on = true, why = "temperatura alta";
         else if (humHigh[t]) on = true, why = "humedad alta";
         else if (vent[t]) on = true, why = "renovación de aire";
