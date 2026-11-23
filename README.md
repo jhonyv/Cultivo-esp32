@@ -53,7 +53,7 @@ Todo lo que es automático (luces, clima, riego, historial) corre en el ESP32 y 
 
 - **Sin internet pero con el WiFi de casa andando:** con el celular en ese WiFi, entrá a `http://cultivo.local` o a la IP que muestra Ajustes.
 - **Sin router:** el equipo levanta su red propia **Cultivo-XXXX** (aparece sola hasta 1 min después de caerse el WiFi). Conectá el celular, con la clave `cultivo123` salvo que la hayas cambiado, y abrí **192.168.4.1**: es el mismo panel completo.
-- **Sin WiFi en el lugar:** conectate a la red propia, andá a Ajustes > WiFi y tocá **No usar WiFi (solo red propia)**. Borra la red guardada y deja la red propia siempre prendida, también después de un corte de luz. Cada vez que llegues, conectás el celular a **Cultivo-XXXX** y abrís **192.168.4.1**. La nube y Telegram no andan en este modo. Si el celular avisa que la red no tiene internet, elegí seguir conectado.
+- **Sin WiFi en el lugar:** conectate a la red propia, andá a Ajustes > WiFi y tocá **Activar modo offline (sin WiFi)**. Borra la red guardada y deja la red propia siempre prendida, también después de un corte de luz. Cada vez que llegues, conectás el celular a **Cultivo-XXXX** y abrís **192.168.4.1**. La nube y Telegram no andan en este modo. Si el celular avisa que la red no tiene internet, elegí seguir conectado.
 - En Ajustes > Equipo, **Red propia del equipo: Siempre prendida** la deja disponible todo el tiempo, aunque haya WiFi. Mientras haya un celular conectado a la red propia y no haya WiFi de casa, el equipo reintenta conectarse cada 5 min en vez de cada 1, para no cortarte.
 
 ## Acceso desde cualquier lado
