@@ -3,14 +3,17 @@
 #include "relays.h"
 #include "sensors.h"
 #include "settings.h"
+#include "soil.h"
+#include "tank.h"
 
 static const char* reasons[NUM_RELAYS];
 static uint32_t nextLightChange[NUM_RELAYS];
-static bool isDay = true;
+static bool isDay[NUM_TENTS] = {true, true};
 static uint32_t lastRun = 0;
 
-// Estados con histéresis, para no prender y apagar a cada rato cerca del límite.
-static bool hot = false, cold = false, humHigh = false, humLow = false;
+// Estados con histéresis por carpa, para no prender y apagar a cada rato cerca del límite.
+static const float VPD_HYST = 0.05f;  // kPa
+static bool hot[NUM_TENTS], cold[NUM_TENTS], humHigh[NUM_TENTS], humLow[NUM_TENTS];
 
 static void hysteresis(bool& state, bool turnOn, bool turnOff) {
   if (turnOn) state = true;
@@ -26,7 +29,8 @@ static bool lightOn(const LightSchedule& l, time_t now, uint32_t& untilChange) {
   return on;
 }
 
-static bool irrigationOn(const RelayConfig& r, time_t now) {
+// Riego programado en curso: devuelve el índice del evento (o -1).
+static int8_t activeEvent(const RelayConfig& r, time_t now) {
   struct tm tm;
   localtime_r(&now, &tm);
   int32_t sec = tm.tm_hour * 3600 + tm.tm_min * 60 + tm.tm_sec;
@@ -34,18 +38,27 @@ static bool irrigationOn(const RelayConfig& r, time_t now) {
     const IrrigationEvent& ev = r.events[e];
     if (!ev.enabled) continue;
     int32_t since = (sec - ev.startMin * 60 + 86400) % 86400;
-    if (since < ev.durSec) return true;
+    if (since < ev.durSec) return e;
   }
-  return false;
+  return -1;
 }
 
+// Estado del riego por humedad de suelo, por relé.
+static const uint32_t SOIL_MIN_GAP_MS = 60UL * 60 * 1000;  // espera entre riegos extra, para que el agua se reparta
+static int8_t decidedEvent[NUM_RELAYS];  // evento ya evaluado + 1, 0 = ninguno (saltear se decide al empezar)
+static bool skipEvent[NUM_RELAYS];
+static uint8_t soilWaterings[NUM_RELAYS];
+static int32_t soilDay[NUM_RELAYS];
+static uint32_t lastSoilWater[NUM_RELAYS];
+static bool soilWatered[NUM_RELAYS];  // hubo al menos un riego extra (para respetar la espera)
+
 static void updateLights(time_t now, bool clockOk) {
-  bool anyLight = false, anyOn = false;
+  bool anyLight[NUM_TENTS] = {}, anyOn[NUM_TENTS] = {};
   for (uint8_t i = 0; i < NUM_RELAYS; i++) {
     const RelayConfig& r = settings.relays[i];
     nextLightChange[i] = 0;
     if (r.type != RelayType::Light) continue;
-    anyLight = true;
+    anyLight[r.tent] = true;
     bool on = false;
     if (!clockOk) {
       reasons[i] = "sin hora";
@@ -54,52 +67,75 @@ static void updateLights(time_t now, bool clockOk) {
       reasons[i] = on ? "horario: encendida" : "horario: apagada";
     }
     relaySetAuto(i, on);
-    if (r.mode != RelayMode::Off && relayState(i)) anyOn = true;
+    if (r.mode != RelayMode::Off && relayState(i)) anyOn[r.tent] = true;
   }
   // Sin luces controladas por el equipo se usan siempre los objetivos de día.
-  isDay = !anyLight || anyOn;
+  for (uint8_t t = 0; t < NUM_TENTS; t++) isDay[t] = !anyLight[t] || anyOn[t];
+}
+
+static bool inFanWindow(const RelayConfig& r, time_t now) {
+  struct tm tm;
+  localtime_r(&now, &tm);
+  uint16_t m = tm.tm_hour * 60 + tm.tm_min;
+  for (uint8_t k = 0; k < r.fanWindowCount; k++) {
+    const FanWindow& w = r.fanWindows[k];
+    if (!w.enabled) continue;
+    if (w.startMin < w.endMin ? (m >= w.startMin && m < w.endMin) : (m >= w.startMin || m < w.endMin)) return true;
+  }
+  return false;
 }
 
 static void updateClimate(time_t now, bool clockOk) {
-  const Climate& c = climate();
-  const ClimateConfig& cfg = settings.climate;
-  const ClimateTargets& t = isDay ? cfg.day : cfg.night;
-
-  if (c.valid) {
-    hysteresis(hot, c.temperature > t.tempMax, c.temperature < t.tempMax - cfg.tempHyst);
-    hysteresis(cold, c.temperature < t.tempMin, c.temperature > t.tempMin + cfg.tempHyst);
-    hysteresis(humHigh, c.humidity > t.humMax, c.humidity < t.humMax - cfg.humHyst);
-    hysteresis(humLow, c.humidity < t.humMin, c.humidity > t.humMin + cfg.humHyst);
-  }
-
-  bool vent = false;
-  if (cfg.ventOnMin && cfg.ventEveryMin) {
-    uint32_t minutes = clockOk ? now / 60 : millis() / 60000;
-    vent = minutes % cfg.ventEveryMin < cfg.ventOnMin;
+  bool vent[NUM_TENTS] = {};
+  for (uint8_t t = 0; t < NUM_TENTS; t++) {
+    const Climate& c = climate(t);
+    const ClimateConfig& cfg = settings.tents[t].climate;
+    const ClimateTargets& tg = isDay[t] ? cfg.day : cfg.night;
+    if (c.valid) {
+      hysteresis(hot[t], c.temperature > tg.tempMax, c.temperature < tg.tempMax - cfg.tempHyst);
+      hysteresis(cold[t], c.temperature < tg.tempMin, c.temperature > tg.tempMin + cfg.tempHyst);
+      // La humedad se maneja por VPD: bajo = aire muy húmedo para esa temperatura, alto = muy seco.
+      hysteresis(humHigh[t], c.vpd < tg.vpdMin, c.vpd > tg.vpdMin + VPD_HYST);
+      hysteresis(humLow[t], c.vpd > tg.vpdMax, c.vpd < tg.vpdMax - VPD_HYST);
+    }
+    if (cfg.ventOnMin && cfg.ventEveryMin) {
+      uint32_t minutes = clockOk ? now / 60 : millis() / 60000;
+      vent[t] = minutes % cfg.ventEveryMin < cfg.ventOnMin;
+    }
   }
 
   for (uint8_t i = 0; i < NUM_RELAYS; i++) {
     bool on = false;
     const char* why = nullptr;
+    uint8_t t = settings.relays[i].tent;
+    const Climate& c = climate(t);
     switch (settings.relays[i].type) {
       case RelayType::FanOut:
       case RelayType::FanIn:
-        if (!c.valid) on = true, why = "sin sensor: ventilando";
-        else if (hot) on = true, why = "temperatura alta";
-        else if (humHigh) on = true, why = "humedad alta";
-        else if (vent) on = true, why = "renovación de aire";
+        if (settings.relays[i].fanMode == FanMode::Always) on = true, why = "permanente";
+        else if (settings.relays[i].fanMode == FanMode::Schedule) {
+          on = !clockOk || inFanWindow(settings.relays[i], now);
+          why = !clockOk ? "sin hora: ventilando" : on ? "horario: prendido" : "horario: apagado";
+        } else if (!c.valid) on = true, why = "sin sensor: ventilando";
+        else if (hot[t]) on = true, why = "temperatura alta";
+        else if (humHigh[t]) on = true, why = "VPD bajo (humedad alta)";
+        else if (vent[t]) on = true, why = "renovación de aire";
         else why = "clima en rango";
         break;
       case RelayType::Humidifier:
-        on = c.valid && humLow;
-        why = !c.valid ? "sin sensor" : on ? "humedad baja" : "humedad en rango";
+        on = c.valid && humLow[t];
+        why = !c.valid ? "sin sensor" : on ? "VPD alto (aire seco)" : "VPD en rango";
         break;
       case RelayType::Dehumidifier:
-        on = c.valid && humHigh;
-        why = !c.valid ? "sin sensor" : on ? "humedad alta" : "humedad en rango";
+        on = c.valid && humHigh[t];
+        why = !c.valid ? "sin sensor" : on ? "VPD bajo (aire húmedo)" : "VPD en rango";
+        break;
+      case RelayType::AirConditioner:  // normalmente en la sala: el intractor mete ese aire frío a la carpa
+        on = c.valid && hot[t];
+        why = !c.valid ? "sin sensor" : on ? "temperatura alta" : "temperatura en rango";
         break;
       case RelayType::Heater:
-        on = c.valid && cold;
+        on = c.valid && cold[t];
         why = !c.valid ? "sin sensor" : on ? "temperatura baja" : "temperatura en rango";
         break;
       default:
@@ -111,12 +147,54 @@ static void updateClimate(time_t now, bool clockOk) {
 }
 
 static void updateIrrigation(time_t now, bool clockOk) {
+  struct tm tm;
+  localtime_r(&now, &tm);
+  int32_t today = clockOk ? tm.tm_year * 1000 + tm.tm_yday : millis() / 86400000UL;
   for (uint8_t i = 0; i < NUM_RELAYS; i++) {
     const RelayConfig& r = settings.relays[i];
-    if (r.type != RelayType::Irrigation) continue;
-    bool on = clockOk && irrigationOn(r, now);
+    if (r.type != RelayType::Irrigation) {
+      decidedEvent[i] = 0;
+      continue;
+    }
+    const SoilReading& s = soil(r.tent);
+    if (soilDay[i] != today) soilDay[i] = today, soilWaterings[i] = 0;
+
+    int8_t ev = clockOk ? activeEvent(r, now) : -1;
+    if (ev + 1 != decidedEvent[i]) {
+      // Arranca un riego programado: con la tierra todavía húmeda se saltea entero.
+      decidedEvent[i] = ev + 1;
+      skipEvent[i] = ev >= 0 && r.soil.skipAbove && s.valid && s.percent >= r.soil.skipAbove;
+      if (skipEvent[i]) Serial.printf("[riego] %s: tierra al %.0f %%, riego salteado\n", r.name, s.percent);
+    }
+    bool on = ev >= 0 && !skipEvent[i];
+    // Tanque casi vacío: la bomba no prende (ni por horario, ni extra, ni "Regar ahora").
+    if (tankLow(r.tent)) {
+      relaySetAuto(i, false);
+      if (relayPulseRemaining(i)) relayPulse(i, 0);
+      reasons[i] = "tanque casi vacío: bomba bloqueada";
+      continue;
+    }
     relaySetAuto(i, on);
-    reasons[i] = !clockOk ? "sin hora" : on ? "regando" : "esperando próximo riego";
+
+    // Riego extra cuando la tierra se seca, solo en Auto, con luces prendidas y respetando el tope diario.
+    bool dry = r.soil.waterBelow && s.valid && s.percent < r.soil.waterBelow;
+    if (dry && !on && r.mode == RelayMode::Auto && isDay[r.tent] && !relayPulseRemaining(i) &&
+        soilWaterings[i] < r.soil.maxPerDay && (!soilWatered[i] || millis() - lastSoilWater[i] > SOIL_MIN_GAP_MS)) {
+      relayPulse(i, r.soil.durSec);
+      soilWaterings[i]++;
+      soilWatered[i] = true;
+      lastSoilWater[i] = millis();
+      Serial.printf("[riego] %s: tierra al %.0f %%, riego extra de %u s\n", r.name, s.percent, r.soil.durSec);
+    }
+
+    if (!clockOk && !r.soil.waterBelow) reasons[i] = "sin hora";
+    else if (on) reasons[i] = "regando";
+    else if (ev >= 0) reasons[i] = "tierra húmeda: riego salteado";
+    else if (relayPulseRemaining(i) && dry) reasons[i] = "tierra seca: riego extra";
+    else if (dry && soilWaterings[i] >= r.soil.maxPerDay) reasons[i] = "tierra seca, tope de riegos extra del día";
+    else if (dry && !isDay[r.tent]) reasons[i] = "tierra seca, espera a que prendan las luces";
+    else if (r.soil.waterBelow && s.valid) reasons[i] = "esperando próximo riego o que se seque la tierra";
+    else reasons[i] = "esperando próximo riego";
   }
 }
 
@@ -137,6 +215,6 @@ void automationLoop() {
   updateIrrigation(now, clockOk);
 }
 
-bool automationIsDay() { return isDay; }
+bool automationIsDay(uint8_t tent) { return isDay[tent < NUM_TENTS ? tent : 0]; }
 const char* automationReason(uint8_t i) { return i < NUM_RELAYS && reasons[i] ? reasons[i] : ""; }
 uint32_t automationNextLightChange(uint8_t i) { return i < NUM_RELAYS ? nextLightChange[i] : 0; }

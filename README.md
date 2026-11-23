@@ -1,6 +1,8 @@
 # Cultivo-esp32
 
-Controlador de carpa de cultivo con ESP32: 8 relés (luces, extractor/intractor, riego y 2 asignables), sensor SHT40/SHT31 de temperatura y humedad con cálculo de VPD, reloj DS3231 de respaldo y panel web.
+Controlador de carpa de cultivo con ESP32: 8 relés (luces, extractor/intractor, riego y 3 asignables), sensor SHT40/SHT31 de temperatura y humedad con cálculo de VPD, reloj DS3231 de respaldo y panel web.
+
+Se amplía a **2 carpas y 16 relés** sumando un PCF8574 y un segundo módulo de relés, con hasta 2 sensores SHT por carpa (promediados). La página tiene un selector Carpa 1 / Carpa 2 y cada carpa lleva su clima, horarios, alertas e historial. Ver [docs/hardware.md](docs/hardware.md).
 
 - Hardware, lista de compras y pines: [docs/hardware.md](docs/hardware.md)
 
@@ -25,17 +27,34 @@ Si el WiFi falla, la red `Cultivo-XXXX` vuelve a aparecer para reconfigurarlo. M
 ## Panel web
 
 - **Inicio:** temperatura, humedad y VPD contra los objetivos, día/noche, gráfico de las últimas 24 h y control rápido de cada relé (Off / Auto / On).
-- **Iluminación:** horario por cada relé de luz: 12/12, 16/8, 18/6, 20/4 o personalizado (horas prendida/apagada libres, por ej. 13/13) y hora de encendido.
-- **Temperatura y humedad:** rangos de día y de noche (con presets por etapa), histéresis y renovación de aire. Extractor e intractor prenden si hace calor, si hay humedad de más o en la renovación; las salidas asignables pueden ser humidificador, deshumidificador o calefactor.
-- **Riego:** hasta 8 riegos por salida (hora + segundos), asistente que los reparte en el horario de luz, “Regar ahora” y una guía rápida.
+- **Iluminación:** un horario para todas las luces de la carpa (cada luz con su Off / Auto / On): 12/12, 16/8, 18/6, 20/4 o personalizado (horas prendida/apagada libres, por ej. 13/13) y hora de encendido.
+- **Temperatura y humedad:** rangos de día y de noche (con presets por etapa); la humedad se controla por **VPD objetivo** (humidificador/deshumidificador), la temperatura con aire acondicionado/calefactor; histéresis y renovación de aire. Cada extractor/intractor trabaja **por clima** (prende si hace calor, si hay humedad de más o en la renovación), **por horario** (franjas) o **permanente** (24/7); las salidas asignables pueden ser humidificador, deshumidificador, calefactor o aire acondicionado (prende con calor junto con los coolers; pensado para el aire de la sala).
+- **Riego:** hasta 12 riegos por salida (hora + segundos), “Regar ahora”, una guía rápida y un **plan por etapa** (vegetativo, estiramiento, flora media, flora tardía; coco o tierra) que arma P0/P1/P2/P3 con los segundos justos según el caudal calibrado de la bomba, las macetas y sus litros.
 - **Historial:** día (cada 5 min), semana (por hora) y mes (por día) con temperatura, humedad y VPD (promedio y mín–máx), más horas de luz, coolers y tiempo de riego por día. Semana y mes se guardan en la flash y sobreviven cortes de luz (35 días).
 - **Ajustes:** WiFi, nombres y función de cada relé, polaridad del módulo, offset de hoja, clave del AP y zona horaria.
 
-En modo **Auto** cada relé sigue su automatización; On/Off lo fuerza a mano. Si el sensor falla, los coolers quedan prendidos y humidificador/deshumidificador/calefactor apagados. Sin hora válida, luces y riego en Auto quedan apagados.
+En modo **Auto** cada relé sigue su automatización; On/Off lo fuerza a mano. Si el sensor falla, los coolers quedan prendidos y humidificador/deshumidificador/calefactor/aire apagados. Sin hora válida, luces y riego en Auto quedan apagados.
 
 La página está en `web/index.html`; al compilar, `tools/embed_web.py` la comprime y la mete en el firmware.
 
 La configuración (nombres, tipos y modo de cada relé, offset de hoja para el VPD, clave del AP, zona horaria) queda guardada en la memoria flash y sobrevive a cortes de luz. Los relés arrancan siempre apagados hasta leer la config.
+
+## Nivel del tanque (opcional)
+
+Con un ultrasónico JSN-SR04T en la tapa del tanque, la página muestra el % y los litros, avisa por Telegram si baja de lo que elijas y puede bloquear la bomba para que no trabaje en seco. Cableado en [docs/hardware.md](docs/hardware.md#nivel-del-tanque-opcional).
+
+## Riego según humedad de suelo (opcional)
+
+Con un ADS1115 y 2 a 4 sensores capacitivos por carpa, el riego por horario puede **saltearse** si la tierra todavía está húmeda y hacer **riegos extra** si se seca (con tope diario). Se activa y calibra en Riego > Humedad de suelo; la humedad de suelo también queda en el historial y en `/estado` de Telegram. Cableado en [docs/hardware.md](docs/hardware.md#humedad-de-suelo-opcional).
+
+## Sin internet o sin router
+
+Todo lo que es automático (luces, clima, riego, historial) corre en el ESP32 y no necesita internet; la hora la mantiene el DS3231.
+
+- **Sin internet pero con el WiFi de casa andando:** con el celular en ese WiFi, entrá a `http://cultivo.local` o a la IP que muestra Ajustes.
+- **Sin router:** el equipo levanta su red propia **Cultivo-XXXX** (aparece sola hasta 1 min después de caerse el WiFi). Conectá el celular, con la clave `cultivo123` salvo que la hayas cambiado, y abrí **192.168.4.1**: es el mismo panel completo.
+- **Sin WiFi en el lugar:** conectate a la red propia, andá a Ajustes > WiFi y tocá **Activar modo offline (sin WiFi)**. Borra la red guardada y deja la red propia siempre prendida, también después de un corte de luz. Cada vez que llegues, conectás el celular a **Cultivo-XXXX** y abrís **192.168.4.1**. La nube y Telegram no andan en este modo. Si el celular avisa que la red no tiene internet, elegí seguir conectado.
+- En Ajustes > Equipo, **Red propia del equipo: Siempre prendida** la deja disponible todo el tiempo, aunque haya WiFi. Mientras haya un celular conectado a la red propia y no haya WiFi de casa, el equipo reintenta conectarse cada 5 min en vez de cada 1, para no cortarte.
 
 ## Acceso desde cualquier lado
 
@@ -48,13 +67,14 @@ La configuración (nombres, tipos y modo de cada relé, offset de hoja para el V
 
 | Método | Ruta | Cuerpo |
 |---|---|---|
-| GET | `/api/status` | — lecturas, hora, WiFi y estado de relés |
+| GET | `/api/status` | — lecturas por carpa y por sensor, hora, WiFi y estado de relés |
 | POST | `/api/relay` | `{"id":0,"mode":"on"\|"off"\|"auto"}` o `{"id":4,"pulse":30}` (prender N segundos) |
-| GET | `/api/history?range=day\|week\|month` | — día: cada 5 min; semana: por hora; mes: por día |
+| GET | `/api/history?range=day\|week\|month&tent=0\|1` | — día: cada 5 min; semana: por hora; mes: por día (por carpa) |
 | GET/POST | `/api/config` | ver `GET` para el formato; en `POST` se mandan solo los campos a cambiar |
 | GET | `/api/wifi/scan` | — (llamar hasta que devuelva `networks`) |
 | POST | `/api/wifi` | `{"ssid":"...","pass":"..."}` |
 | POST | `/api/wifi/forget` | — |
+| POST | `/api/wifi/offline` | — (no usar WiFi de casa: red propia siempre prendida) |
 | POST | `/api/time` | `{"epoch":1730000000}` (UTC) |
 | POST | `/api/restart` | — |
 
