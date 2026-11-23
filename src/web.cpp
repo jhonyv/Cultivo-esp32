@@ -73,6 +73,13 @@ static void handleWifi() {
   netSaveCredentials(ssid, pass);
 }
 
+// POST /api/wifi/offline: no usar WiFi de casa, dejar la red propia siempre prendida.
+static void handleOffline() {
+  server.send(200, "application/json", "{\"ok\":true}");
+  delay(100);
+  netUseApOnly();
+}
+
 static void handleForget() {
   server.send(200, "application/json", "{\"ok\":true}");
   delay(200);
@@ -124,6 +131,7 @@ void webBegin() {
   route("/api/wifi/scan", HTTP_GET, handleScan);
   route("/api/wifi", HTTP_POST, handleWifi);
   route("/api/wifi/forget", HTTP_POST, handleForget);
+  route("/api/wifi/offline", HTTP_POST, handleOffline);
   server.onNotFound(handleNotFound);
   server.begin();
 }

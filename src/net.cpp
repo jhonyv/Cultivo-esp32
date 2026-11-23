@@ -154,6 +154,21 @@ void netSaveCredentials(const String& newSsid, const String& newPass) {
   startConnect();
 }
 
+void netUseApOnly() {
+  Preferences prefs;
+  prefs.begin("wifi", false);
+  prefs.clear();
+  prefs.end();
+  ssid = "";
+  pass = "";
+  connectStart = 0;
+  WiFi.disconnect(false, true);  // corta el WiFi de casa pero deja la red propia
+  settings.apAlways = true;
+  settingsSave();
+  startAp();
+  Serial.println("[wifi] modo sin WiFi: solo red propia");
+}
+
 void netForget() {
   Preferences prefs;
   prefs.begin("wifi", false);

@@ -122,7 +122,9 @@ canvas{width:100%;height:190px;display:block}
 <div class="card local-only" data-nodirty><h3>WiFi</h3><div id="wst" class="mut" style="margin:6px 0"></div>
 <div class="row"><select id="ssid"><option value="">Elegí una red…</option></select><button class="btn sec" onclick="scan()">Buscar redes</button></div>
 <div class="row"><input id="ssidm" placeholder="o escribí el nombre de la red"><input id="pass" type="password" placeholder="Clave"></div>
-<div class="actions"><button class="btn" onclick="saveWifi()">Conectar</button><button class="btn sec" onclick="forget()">Olvidar red</button><span class="mut" id="wmsg"></span></div></div>
+<div class="actions"><button class="btn" onclick="saveWifi()">Conectar</button><button class="btn sec" onclick="forget()">Olvidar red</button><span class="mut" id="wmsg"></span></div>
+<div class="tip" style="margin-top:10px"><b>¿No hay WiFi en el lugar?</b> Usá el equipo sin WiFi: la red propia <b class="apN">Cultivo-XXXX</b> queda siempre prendida, todo sigue andando (relés, sensores, horarios con el reloj) y entrás conectando el celular a esa red y abriendo <b>192.168.4.1</b>. La nube y Telegram no andan en este modo.</div>
+<div class="actions"><button class="btn sec" onclick="apOnly()">No usar WiFi (solo red propia)</button></div></div>
 <div class="card"><h3>Carpas</h3><div class="mut">La carpa 2 usa los relés 9-16 (módulo por PCF8574) y los sensores del segundo bus I2C.</div><div id="cfgt"></div></div>
 <div class="card"><h3>Relés</h3><div class="mut">Nombre, función y carpa de cada salida.</div><div style="overflow-x:auto"><table id="cfgr"></table></div></div>
 <div class="card"><h3>Equipo</h3>
@@ -442,7 +444,7 @@ async function pulse(i,s){S=await call('/api/relay',{id:i,pulse:s===undefined?+$
 function refreshStates(p,status){S.relays.forEach((r,i)=>{const c=$(p+i);if(!c)return;c.querySelector('.dot').classList.toggle('on',r.on);c.querySelector('[data-st]').innerHTML=status(r);c.querySelector('.seg').outerHTML=seg(i,r.mode)})}
 
 function renderSettings(){
- const w=S.wifi;$('wst').textContent=(w.connected?`Conectado a ${w.ssid} · IP ${w.ip} · ${w.rssi} dBm`:(w.ssid?`Sin conexión a ${w.ssid}`:'Sin red configurada'))+(w.ap?` · red propia "${w.apSsid}" activa (192.168.4.1)`:'');
+ const w=S.wifi;document.querySelectorAll('.apN').forEach(e=>e.textContent=w.apSsid||'Cultivo-XXXX');$('wst').textContent=(!w.ssid&&C&&C.apAlways)?`Modo sin WiFi: red propia "${w.apSsid}" siempre prendida (192.168.4.1)`:(w.connected?`Conectado a ${w.ssid} · IP ${w.ip} · ${w.rssi} dBm`:(w.ssid?`Sin conexión a ${w.ssid}`:'Sin red configurada'))+(w.ap?` · red propia "${w.apSsid}" activa (192.168.4.1)`:'');
  if(dirty.has('ajustes'))return;
  $('mqSt').textContent=C.mqttHost?(S.wifi.cloud?'Conectado':'Sin conectar (revisá los datos)'):'Desactivada';$('devId').textContent=S.device||'--';
  $('cloudUrl').textContent=CLOUD_PANEL_URL;$('cloudUrl').href=CLOUD_PANEL_URL;
@@ -466,6 +468,7 @@ async function saveWebPw(off){const pw=off?'':$('webPw').value;if(!off&&pw.lengt
  C=await call('/api/config',{webPassword:pw},off?'Contraseña quitada':'Contraseña guardada: el navegador te la va a pedir');$('webPw').value='';dirty.delete('ajustes');renderSettings()}
 async function scan(){$('wmsg').textContent='Buscando…';for(let k=0;k<20;k++){const r=await api('/api/wifi/scan');if(r.networks){$('ssid').innerHTML='<option value="">Elegí una red…</option>'+r.networks.sort((a,b)=>b.rssi-a.rssi).map(n=>`<option>${esc(n.ssid)}</option>`).join('');$('wmsg').textContent=r.networks.length+' redes';return}await new Promise(r=>setTimeout(r,1000))}$('wmsg').textContent='No se pudo escanear'}
 async function saveWifi(){const ssid=$('ssidm').value||$('ssid').value;if(!ssid)return;await call('/api/wifi',{ssid,pass:$('pass').value});$('wmsg').textContent='Conectando… después entrá a http://cultivo.local o a la IP que aparezca acá.'}
+async function apOnly(){await call('/api/wifi/offline',{});if(C)C.apAlways=true;$('wmsg').textContent='Listo: modo sin WiFi.';setTimeout(refresh,1500)}
 async function forget(){if(confirm('¿Borrar la red guardada y reiniciar?'))await call('/api/wifi/forget',{})}
 async function syncTime(){S=await call('/api/time',{epoch:Math.floor(Date.now()/1000)},'Hora actualizada');renderAll()}
 async function restart(){if(confirm('¿Reiniciar el equipo?'))await call('/api/restart',{},'Reiniciando…')}

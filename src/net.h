@@ -13,4 +13,5 @@ String netApSsid();
 String netSavedSsid();
 
 void netSaveCredentials(const String& ssid, const String& pass);  // guarda y reconecta
+void netUseApOnly();                                             // sin WiFi de casa: solo la red propia, siempre prendida
 void netForget();                                                 // borra la red y reinicia
