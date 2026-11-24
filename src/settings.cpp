@@ -505,7 +505,7 @@ void settingsBegin() {
 
   JsonDocument doc;
   String error;
-  bool bad = deserializeJson(doc, json);
+  bool bad = deserializeJson(doc, json) != DeserializationError::Ok;
   // Config guardada por la otra versión (4 u 8 relés por carpa): se conserva todo menos los relés,
   // que arrancan con la distribución por defecto de esta versión.
   if (!bad && doc["relays"].is<JsonArray>() && doc["relays"].size() != NUM_RELAYS) {
