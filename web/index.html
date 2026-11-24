@@ -259,7 +259,13 @@ function setTent(k){if(k==TENT)return;TENT=k;try{localStorage.setItem('cultivoTe
  ['luz','clima','riego'].forEach(d=>dirty.delete(d));H=null;HD=null;renderAll();loadHistory();if(location.hash=='#historial')loadRange()}
 
 // ---------- render ----------
-function renderAll(){if(!S||!C)return;renderTents();renderHome();renderLights();renderClimate();renderIrrig();renderSettings()}
+// Las secciones desplegables (<details>) se redibujan con el refresco: se recuerda cuáles abrió o cerró
+// el usuario y se dejan igual, así no se cierran solas.
+const detKey=d=>{const e=d.querySelector('[id]');return e?e.id:d.id||(d.querySelector('summary')||{}).textContent};
+const detState=new Map();
+document.addEventListener('toggle',e=>{if(e.target.tagName=='DETAILS')detState.set(detKey(e.target),e.target.open)},true);
+function restoreDetails(){document.querySelectorAll('details').forEach(d=>{const k=detKey(d);if(detState.has(k)&&d.open!=detState.get(k))d.open=detState.get(k)})}
+function renderAll(){if(!S||!C)return;renderTents();renderHome();renderLights();renderClimate();renderIrrig();renderSettings();restoreDetails()}
 function renderHome(){
  const c=tentS().climate,t=targets();
  const cls=(v,lo,hi)=>v<lo||v>hi?'warn':'ok';
