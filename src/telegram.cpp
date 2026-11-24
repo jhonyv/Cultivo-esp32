@@ -100,7 +100,7 @@ static const char* HELP =
     "Comandos:\n"
     "/estado – lecturas y relés\n"
     "/luces on|off|auto – todas las luces\n"
-    "/rele N on|off|auto – un relé (1 a 16)\n"
+    "/rele N on|off|auto – un relé (el número de Ajustes > Relés)\n"
     "/regar N SEG – prende el relé N esos segundos\n"
     "/ayuda – esta ayuda";
 

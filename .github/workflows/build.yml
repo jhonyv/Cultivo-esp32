@@ -16,4 +16,4 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install platformio
-      - run: pio run
+      - run: pio run -e cultivo-4 -e cultivo-8

@@ -7,7 +7,7 @@ static bool autoStates[NUM_RELAYS];
 static uint32_t pulseStart[NUM_RELAYS];
 static uint32_t pulseMs[NUM_RELAYS];
 
-// Relés 9-16 en el PCF8574: se escribe el byte entero cuando cambia (y cada tanto, por si se reconectó).
+// Relés 9-16 en el PCF8574 (solo en la versión de 8 por carpa): se escribe el byte entero cuando cambia (y cada tanto, por si se reconectó).
 static bool expanderReady = false;
 static bool expanderPresent = false;
 static uint8_t expanderOut = 0xFF;
@@ -28,7 +28,7 @@ static void writeRelay(uint8_t i, bool on) {
 }
 
 static void flushExpander() {
-  if (!expanderReady) return;
+  if (!HAS_RELAY_EXPANDER || !expanderReady) return;
   if (expanderOut == expanderWritten && millis() - expanderLastWrite < 5000) return;
   Wire.beginTransmission(PCF8574_ADDR);
   Wire.write(expanderOut);

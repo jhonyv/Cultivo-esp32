@@ -1,22 +1,31 @@
 # Hardware
 
-Pensado para una carpa de 1,5 m con 8 salidas a relé, sensor de temperatura/humedad y reloj de respaldo. Se puede ampliar a **2 carpas y 16 relés** con un expansor PCF8574 y sensores detectados solos en cada carpa (ver [Segunda carpa](#segunda-carpa-16-relés) y [Sensores de cada carpa](#sensores-de-cada-carpa-cable-rj45)).
+Pensado para **2 carpas con 4 relés cada una** (Luz, Extractor, Intractor y Riego), sensores que se detectan solos en cada carpa y reloj de respaldo. Hay dos versiones del firmware, iguales salvo la cantidad de relés:
+
+| Versión (environment de PlatformIO) | Relés | Cómo se conectan |
+|---|---|---|
+| **`cultivo-4`** (la que sube el botón de VS Code) | 4 por carpa, 8 en total | Directo a 8 GPIO del ESP32. Un cable de red por carpa hasta su caja de potencia. |
+| `cultivo-8` | 8 por carpa, 16 en total | 1-8 directo al ESP32, 9-16 por un expansor PCF8574. Ver [Versión de 8 relés por carpa](#versión-de-8-relés-por-carpa-cultivo-8). |
+
+Para subir la de 8: `pio run -e cultivo-8 -t upload` (o elegir `env:cultivo-8` abajo en la barra de PlatformIO). Al pasar de una a otra, los relés vuelven a sus nombres por defecto y el resto de la configuración (WiFi, Telegram, climas, sensores) se conserva.
+
+Hay un **mapa de conexión** con dibujo y las cajas para imprimir en [`cases/`](../cases).
 
 ## Lista de compras
 
 | Cant. | Componente | Notas |
 |---|---|---|
 | 1 | **ESP32 DevKit V1** (ESP32-WROOM-32, 30 o 38 pines) | Evitar versiones WROVER: usan los GPIO16/17 para PSRAM. |
-| 1 | **Módulo de 8 relés 5V con optoacoplador** | Que tenga jumper `JD-VCC` para alimentar las bobinas aparte. Contactos 10 A/250 VAC. |
-| 1 | **Sensor SHT40** (o SHT31) en placa breakout, I2C | Mejor si viene con funda/filtro. El SHT40 es más preciso y barato que el SHT31; el firmware detecta cualquiera de los dos. |
+| 2 | **Módulo de 4 relés 5 V con optoacoplador** | Uno por carpa. Que tenga jumper `JD-VCC` para alimentar las bobinas aparte. Contactos 10 A/250 VAC. |
+| 2 | **Fuente 5 V para riel DIN** (tipo HDR-15-5) | Una por caja de potencia, para las bobinas de los relés. |
+| 1 | **Fuente 5 V 3 A** tipo cargador + jack de panel 5,5 × 2,1 | Alimenta el ESP32 y los sensores. Así la caja de control no tiene 220 V. |
 | 1 | **RTC DS3231** (módulo ZS-042 o similar) + pila CR2032 | Mantiene la hora sin WiFi. En el ZS-042 conviene sacar el diodo/resistencia de carga si usás CR2032 no recargable. |
-| 1 | **Fuente 5V 3A** (riel DIN o tipo cargador de buena calidad) | Alimenta ESP32 + relés. Con los 8 relés activos consumen ~0,6 A. |
-| 1 | Cable 4 hilos mallado o UTP (hasta 3 m) | Para llevar el SHT lejos de la caja. |
-| 1 | Caja estanca IP65 + borneras/riel DIN | Separar zona de 220 V de la de 5 V. |
-| 1 | Termomagnética 10 A + fusibles por salida (opcional pero recomendado) | Especialmente en la salida de luces. |
-| — | Cables dupont, termocontraíble, prensacables | |
-
-Para la segunda carpa, sumá: 1 módulo de 8 relés más, 1 **PCF8574** (módulo I2C, dirección 0x20) y los sensores.
+| 1-2 por carpa | **Sensor SHT40** (o SHT31) en placa breakout, I2C | Mejor si viene con funda/filtro. El firmware detecta cualquiera de los dos. |
+| 8 | **Keystone RJ45 Cat6 hembra** | 4 en la caja de control, 1 por cajita de sensores y 1 por caja de potencia. |
+| 4 | **Cable Cat6 con fichas** | 2 a las cajitas de sensores y 2 a las cajas de potencia (hasta ~3 m). |
+| 2 | Térmica (y diferencial de 30 mA si no hay uno en el tablero) | Una por caja de potencia. |
+| 8 | Tomas para riel DIN | 4 por caja de potencia. |
+| — | Placas perforadas, JST XH, resistencias de 100 kΩ, capacitor de 470 µF, tornillos | Detalle en el mapa de conexión. |
 
 Por carpa, opcionales y detectados solos: un segundo SHT, un **SCD40/SCD41** (CO₂), un **BH1750** (luz) y hasta 2 **sensores capacitivos de humedad de suelo v1.2/v2.0** con una resistencia de **100 kΩ** cada uno. Ver [Sensores de cada carpa](#sensores-de-cada-carpa-cable-rj45).
 
@@ -26,64 +35,85 @@ Opcional para más adelante: humidificador ultrasónico, deshumidificador, senso
 
 | Función | GPIO ESP32 | Notas |
 |---|---|---|
-| Relé 1 – Luz 1 | 16 | |
-| Relé 2 – Luz 2 | 17 | |
-| Relé 3 – Extractor (cooler out) | 18 | |
-| Relé 4 – Intractor (cooler in) | 19 | |
-| Relé 5 – Riego (bomba) | 23 | |
-| Relé 6 – Asignable 1 | 25 | |
-| Relé 7 – Asignable 2 | 26 | |
-| Relé 8 – Asignable 3 | 27 | |
-| I2C SDA (SHT carpa 1 + DS3231 + PCF8574) | 21 | Bus principal |
-| I2C SCL (SHT carpa 1 + DS3231 + PCF8574) | 22 | Bus principal |
-| I2C2 SDA (sensores carpa 2) | 4 | Segundo bus, solo si usás la carpa 2 |
-| I2C2 SCL (sensores carpa 2) | 5 | Segundo bus, solo si usás la carpa 2 |
+| Carpa 1: relés 1-4 (Luz, Extractor, Intractor, Riego) | 16, 17, 18, 19 | RJ45 "RELES 1" |
+| Carpa 2: relés 5-8 (Luz, Extractor, Intractor, Riego) | 23, 25, 26, 27 | RJ45 "RELES 2" |
+| I2C SDA (sensores carpa 1 + DS3231) | 21 | Bus principal |
+| I2C SCL (sensores carpa 1 + DS3231) | 22 | Bus principal |
+| I2C2 SDA (sensores carpa 2) | 4 | Segundo bus |
+| I2C2 SCL (sensores carpa 2) | 5 | Segundo bus |
 | Suelo carpa 1, sensores 1 y 2 | 36 (VP) y 39 (VN) | Analógicos, opcionales |
 | Suelo carpa 2, sensores 1 y 2 | 32 y 33 | Analógicos, opcionales |
 | Tanque TRIG / ECHO | 13, 14 / 34, 35 | Opcional, ver abajo |
-| Relés 9-16 | P0-P7 del PCF8574 | No usan GPIO del ESP32 |
 | Botón reset WiFi | 0 (BOOT) | Mantener 5 s con el equipo encendido borra la red guardada |
 | LED de estado | 2 (LED de la placa) | Fijo = conectado, parpadea = modo AP |
 
 Los relés están en pines que **no son de arranque (strapping)** ni de flash, para que no hagan clic al encender y el ESP32 bootee siempre. El GPIO5 sí es de arranque, pero en el bus I2C queda en alto por la pull-up, que es justo lo que necesita para bootear. Los sensores de suelo van en pines del ADC1 (32 a 39), los únicos analógicos que leen con el WiFi prendido.
 
-## Conexiones
+Los nombres y funciones son los de fábrica: en Ajustes > Relés cada uno se renombra, se le cambia la función (luz, extractor, riego, humidificador, aire, genérico…) o se pasa a la otra carpa, sin tocar cables.
+
+## Relés: cable RJ45 a la caja de potencia de cada carpa
+
+Cada carpa tiene su **caja de potencia** (caja de térmicas con riel DIN): térmica, una fuente de 5 V para riel DIN, el módulo de 4 relés y 4 tomas DIN. Desde la caja de control sale un cable de red (Cat5e/Cat6) por carpa, con el mismo tipo de keystone que los sensores.
+
+| Pin (T568B) | Hilo | Señal | En el módulo de relés |
+|---|---|---|---|
+| 1 | blanco-naranja | GND | — (ver abajo) |
+| 2 | naranja | Relé 1 · Luz | IN1 |
+| 3 | blanco-verde | GND | — |
+| 4 | azul | 3,3 V | VCC |
+| 5 | blanco-azul | GND | — |
+| 6 | verde | Relé 2 · Extractor | IN2 |
+| 7 | blanco-marrón | Relé 3 · Intractor | IN3 |
+| 8 | marrón | Relé 4 · Riego | IN4 |
+
+| Carpa | IN1 | IN2 | IN3 | IN4 |
+|---|---|---|---|---|
+| 1 | GPIO16 | GPIO17 | GPIO18 | GPIO19 |
+| 2 | GPIO23 | GPIO25 | GPIO26 | GPIO27 |
 
 ```
-Fuente 5V ──┬── VIN ESP32
-            ├── JD-VCC módulo relés   (sacar jumper JD-VCC↔VCC)
-            └── GND común (fuente, ESP32 y GND del módulo de relés)
-
-ESP32 3V3 ── VCC módulo relés (lado optoacoplador)
-ESP32 GPIO16,17,18,19,23,25,26,27 ── IN1..IN8
-
-ESP32 3V3 ── VCC SHT40 ── VCC DS3231
-ESP32 GND ── GND SHT40 ── GND DS3231
-ESP32 21  ── SDA SHT40 ── SDA DS3231
-ESP32 22  ── SCL SHT40 ── SCL DS3231
+Caja de potencia de cada carpa (jumper JD-VCC sacado):
+  RJ45 pin 4 (3,3 V) ── VCC   (ficha de entrada del módulo)
+  RJ45 pines 2, 6, 7, 8 ── IN1, IN2, IN3, IN4
+  Fuente DIN 5 V  + ── JD-VCC      − ── GND (ficha del jumper, al lado de JD-VCC)
 ```
 
-- Los módulos de relé típicos son **activos en bajo** (IN a GND = relé activado). El firmware viene configurado así; si el tuyo es activo en alto se cambia desde la configuración.
-- Alimentando el lado de entrada del módulo con 3V3 y las bobinas con 5V (JD-VCC) los relés conmutan bien con la lógica de 3,3 V del ESP32 y quedan aislados.
-- El SHT y el DS3231 comparten el bus I2C (SHT 0x44, DS3231 0x68). Los breakouts ya traen pull-ups.
-- Con cable largo al SHT (>2 m) usá cable mallado y, si hay lecturas erráticas, bajá la velocidad I2C (`I2C_FREQ` en `include/config.h`).
+- El optoacoplador se prende con VCC e IN, que vienen los dos del ESP32, y las bobinas con la fuente de 5 V de la caja. Así **los 220 V y el ruido de las bobinas quedan aislados** del ESP32. Por eso los GND del cable no se conectan al módulo (quedan sueltos y aislados en esa punta): sirven de blindaje para las señales.
+- El 3,3 V y los GND están en los mismos pines que en el cable de sensores: si se cruzan los cables por error no hay cortocircuito. Igual rotulá las puntas.
+- Los módulos de relé típicos son **activos en bajo** (IN a GND = relé activado). El firmware viene configurado así; si el tuyo es activo en alto se cambia en Ajustes > Equipo.
+- **Probalo en la mesa antes de armar.** Algunos módulos traen el LED indicador en serie con el optoacoplador y con 3,3 V en VCC enganchan justo. Si un relé no engancha firme, usá un módulo con jumper de disparo alto/bajo ("high/low level trigger"): se alimenta con la fuente de 5 V (DC+ y DC−), los GND del cable van a DC−, IN igual que arriba, y se elige la polaridad en Ajustes.
 
-## Segunda carpa: 16 relés
-
-Los GPIO libres del ESP32 no alcanzan para 8 relés más, así que los relés 9-16 van por un **PCF8574** colgado del mismo bus I2C (solo usa SDA/SCL).
+## Alimentación de la caja de control
 
 ```
+Cargador 5 V 3 A ── jack ──┬── VIN ESP32
+                           ├── 470 µF a GND, cerca del ESP32
+                           └── GND común (ESP32, DS3231, GND de los 4 RJ45)
+
+ESP32 3V3 ── DS3231 VCC ── pin 4 de los 4 RJ45 (sensores y VCC de los módulos de relés)
+ESP32 21/22 ── DS3231 SDA/SCL ── RJ45 sensores carpa 1
+```
+
+- Si usás dos SCD40 (uno por carpa), cada uno pide picos de 200 mA en 3,3 V. Sumá un regulador AMS1117 de 3,3 V alimentado desde los 5 V y sacá de ahí el pin 4 de los RJ45 de sensores, así no se cae el ESP32.
+
+## Versión de 8 relés por carpa (`cultivo-8`)
+
+Los GPIO libres del ESP32 no alcanzan para 16 relés, así que en esta versión los relés 9-16 van por un **PCF8574** colgado del bus I2C principal (solo usa SDA/SCL), y cada carpa usa un módulo de 8 relés. Por defecto cada carpa tiene Luz 1, Luz 2, Extractor, Intractor, Riego y 3 asignables.
+
+```
+Relés 1-8 (carpa 1): GPIO16,17,18,19,23,25,26,27 ── IN1..IN8
+
 PCF8574  VCC ── 3V3      GND ── GND
          SDA ── GPIO21   SCL ── GPIO22
          A0, A1, A2 ── GND        (dirección 0x20)
-         P0..P7 ── IN1..IN8 del segundo módulo de relés
+         P0..P7 ── IN1..IN8 del módulo de la carpa 2
 
-Segundo módulo de relés: VCC ── 3V3, JD-VCC ── 5V, GND común (igual que el primero)
+Cada módulo de 8: VCC ── 3V3, JD-VCC ── 5 V (jumper sacado)
 ```
 
+- Un RJ45 no alcanza para 8 señales más alimentación: se usa una ficha aviador **GX20 de 12 pines** por carpa (8 señales, 3,3 V, 5 V y 2 GND). La caja de control para esta versión se genera con `RELAY_LINK=gx20 python3 cases/build.py`.
 - El PCF8574 arranca con todas las salidas en alto, o sea **relés apagados** en módulos activos en bajo (los comunes). La polaridad elegida en Ajustes vale para los dos módulos.
 - Si el PCF8574 no está conectado, el equipo funciona igual con 8 relés y la página marca los relés 9-16 como "módulo no conectado".
-- La carpa 2 se activa en Ajustes > Carpas; ahí también se elige a qué carpa pertenece cada relé (por defecto 1-8 carpa 1 y 9-16 carpa 2).
 
 ## Sensores de cada carpa (cable RJ45)
 
@@ -115,7 +145,7 @@ Los tres GND se unen en las dos puntas. Cada señal viaja trenzada con un GND, a
 - El SCD40 también mide temperatura y humedad, pero se calienta un poco: se usa solo si no hay ningún SHT.
 - Si desenchufás un sensor, a los pocos segundos desaparece del panel. Si lo enchufás, aparece solo en menos de 30 s.
 
-**Resistencias pull-up.** En I2C las líneas SDA y SCL las sube a 3,3 V una resistencia (pull-up) y los sensores solo las bajan. Casi todos los módulos traen la suya de 4,7 kΩ o 10 kΩ. Con 3 módulos en el mismo bus quedan 3 en paralelo y la línea queda demasiado "fuerte", y con cable largo puede fallar. Dejá **una sola por bus**: la del módulo más cercano al ESP32, o un par de 4,7 kΩ soldadas en la cajita. En los otros módulos sacá la resistencia o cortá el puente que la conecta (suele decir PU o tener dos resistencias marcadas 472 o 103 al lado de SDA/SCL).
+**Resistencias pull-up.** En I2C las líneas SDA y SCL las sube a 3,3 V una resistencia (pull-up) y los sensores solo las bajan. Casi todos los módulos traen la suya de 4,7 kΩ o 10 kΩ, y quedan en paralelo. Con hasta 3 o 4 módulos en el mismo bus sigue dentro de lo que banca el I2C, y con el cable largo hasta ayuda: **no hace falta sacar ni agregar nada**. Si alguna vez ves lecturas que saltan, primero bajá la velocidad del bus (`I2C_FREQ` en `include/config.h`); si sigue, sacá la resistencia de los módulos que estén más lejos (cortando el puente que dice PU, o las dos resistencias marcadas 472 o 103 al lado de SDA/SCL).
 
 ## Humedad de suelo (opcional)
 
@@ -158,8 +188,10 @@ JSN-SR04T  VCC ── 5V      GND ── GND
 - Se activa en Riego > Tanque: cargás la distancia con el tanque vacío y lleno (o con los botones "lectura actual") y los litros.
 - **Avisarme debajo de X %** manda una alerta por Telegram; **No prender la bomba debajo de X %** bloquea el riego de esa carpa (horario, extra y "Regar ahora") para que la bomba no trabaje en seco.
 
-## 220 V – seguridad
+## 220 V – caja de potencia y seguridad
 
+- Entrada: fase y neutro del tablero → **térmica** → (diferencial de 30 mA, si no hay uno en el tablero de la casa: con agua cerca va sí o sí).
+- La fase va al **COM** de cada relé y el contacto **NO** a la fase de su toma. Neutro y tierra, comunes a los 4 tomas.
 - Cortar siempre la **fase** con el relé (no el neutro).
 - Luces LED de más de ~300 W o equipos con mucha corriente de arranque: usar el relé para mandar un **contactor** en lugar de cargarlo directo.
 - Coolers y bombas inductivas: un snubber RC (o MOV) en paralelo a la carga alarga la vida de los contactos.
