@@ -79,7 +79,7 @@ Caja de potencia de cada carpa (jumper JD-VCC sacado):
 ```
 
 - El optoacoplador se prende con VCC e IN, que vienen los dos del ESP32, y las bobinas con la fuente de 5 V de la caja. Así **los 220 V y el ruido de las bobinas quedan aislados** del ESP32. Por eso los GND del cable no se conectan al módulo (quedan sueltos y aislados en esa punta): sirven de blindaje para las señales.
-- El 3,3 V y los GND están en los mismos pines que en el cable de sensores: si se cruzan los cables por error, no se rompe nada.
+- El 3,3 V y los GND están en los mismos pines que en el cable de sensores: si se cruzan los cables por error no hay cortocircuito. Igual rotulá las puntas.
 - Los módulos de relé típicos son **activos en bajo** (IN a GND = relé activado). El firmware viene configurado así; si el tuyo es activo en alto se cambia en Ajustes > Equipo.
 - **Probalo en la mesa antes de armar.** Algunos módulos traen el LED indicador en serie con el optoacoplador y con 3,3 V en VCC enganchan justo. Si un relé no engancha firme, usá un módulo con jumper de disparo alto/bajo ("high/low level trigger"): se alimenta con la fuente de 5 V (DC+ y DC−), los GND del cable van a DC−, IN igual que arriba, y se elige la polaridad en Ajustes.
 
