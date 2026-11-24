@@ -96,7 +96,7 @@ static void settingsDefaults() {
     tc.climate.tempHyst = 0.5f;
     tc.climate.ventOnMin = 5;
     tc.climate.ventEveryMin = 30;
-    tc.soil = {false, 3, 21000, 9500};
+    tc.soil = {false, 2600, 1100, 20};
     tc.tank = {false, 60, 25, 50, 20, 5};  // valores típicos de un capacitivo v1.2 a 3,3 V
   }
   settings.relayActiveLow = true;
@@ -271,17 +271,19 @@ static bool tankFromJson(JsonObjectConst o, TankConfig& c, String& error) {
 
 static void soilToJson(const SoilConfig& c, JsonObject o) {
   o["enabled"] = c.enabled;
-  o["count"] = c.count;
   o["dry"] = c.dry;
+  o["alert"] = c.alertBelow;
   o["wet"] = c.wet;
 }
 
 static bool soilFromJson(JsonObjectConst o, SoilConfig& c, String& error) {
   if (o.isNull()) return true;
   if (o["enabled"].is<bool>()) c.enabled = o["enabled"];
-  if (o["count"].is<int>()) c.count = constrain(o["count"].as<int>(), 1, SOIL_SENSORS_MAX);
+  if (o["alert"].is<int>()) c.alertBelow = constrain(o["alert"].as<int>(), 0, 90);
   if (o["dry"].is<int>()) c.dry = constrain(o["dry"].as<int>(), 0, 32767);
   if (o["wet"].is<int>()) c.wet = constrain(o["wet"].as<int>(), 0, 32767);
+  // Calibración vieja del ADS1115 (otra escala): se vuelve a los valores típicos en mV.
+  if (c.dry > 3300) c.dry = 2600, c.wet = 1100;
   if (c.dry <= c.wet) {
     error = "Suelo: la lectura en seco tiene que ser mayor que la mojada";
     return false;

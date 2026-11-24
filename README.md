@@ -43,9 +43,13 @@ La configuración (nombres, tipos y modo de cada relé, offset de hoja para el V
 
 Con un ultrasónico JSN-SR04T en la tapa del tanque, la página muestra el % y los litros, avisa por Telegram si baja de lo que elijas y puede bloquear la bomba para que no trabaje en seco. Cableado en [docs/hardware.md](docs/hardware.md#nivel-del-tanque-opcional).
 
-## Riego según humedad de suelo (opcional)
+## Sensores que se detectan solos
 
-Con un ADS1115 y 2 a 4 sensores capacitivos por carpa, el riego por horario puede **saltearse** si la tierra todavía está húmeda y hacer **riegos extra** si se seca (con tope diario). Se activa y calibra en Riego > Humedad de suelo; la humedad de suelo también queda en el historial y en `/estado` de Telegram. Cableado en [docs/hardware.md](docs/hardware.md#humedad-de-suelo-opcional).
+Cada carpa tiene su propio bus I2C (cable RJ45 hasta una cajita en la carpa). El equipo detecta solo lo que enchufes, le pone nombre y muestra únicamente eso: hasta 2 SHT (Temp/Hum, se promedian para el VPD), un SCD40/41 (CO₂) y un BH1750 (luz). Pines, colores del cable y pull-ups en [docs/hardware.md](docs/hardware.md#sensores-de-cada-carpa-cable-rj45).
+
+## Humedad de suelo (opcional)
+
+Hasta 2 sensores capacitivos por carpa, directo a pines analógicos. Si hay alguno enchufado, la humedad aparece sola en Riego y queda en el historial; también se puede pedir un aviso por Telegram si la tierra baja de un %. El **control del riego por sensor de suelo** viene apagado, porque el riego lo manda el horario. Si lo prendés, cada riego puede **saltearse** si la maceta sigue mojada o dar **riegos extra** si se seca (con tope diario). Cableado en [docs/hardware.md](docs/hardware.md#humedad-de-suelo-opcional).
 
 ## Sin internet o sin router
 

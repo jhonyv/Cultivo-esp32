@@ -14,12 +14,14 @@ static const uint8_t RELAY_PINS[NUM_GPIO_RELAYS] = {16, 17, 18, 19, 23, 25, 26, 
 #define PIN_I2C_SDA 21
 #define PIN_I2C_SCL 22
 // Segundo bus I2C: sensores de la carpa 2.
-#define PIN_I2C2_SDA 32
-#define PIN_I2C2_SCL 33
+#define PIN_I2C2_SDA 4
+#define PIN_I2C2_SCL 5
 #define I2C_FREQ 100000
-#define SENSORS_PER_TENT 2  // SHT en 0x44 y 0x45 (pin ADDR) de cada bus
-#define ADS1115_ADDR 0x48     // humedad de suelo (opcional), uno por bus/carpa
-#define SOIL_SENSORS_MAX 4    // canales A0..A3 del ADS1115
+// Humedad de suelo (opcional): 2 sensores capacitivos analógicos por carpa, en pines ADC1
+// (los únicos que leen con el WiFi prendido). Cada entrada lleva una resistencia de 100k a GND
+// para que, sin sensor, lea 0 y el equipo sepa que no hay nada conectado.
+#define SOIL_SENSORS_MAX 2
+static const uint8_t SOIL_PINS[2][SOIL_SENSORS_MAX] = {{36, 39}, {32, 33}};
 
 // Nivel del tanque (opcional): ultrasónico JSN-SR04T por carpa. ECHO por divisor 1k/2k (sale a 5 V).
 static const uint8_t TANK_TRIG_PINS[NUM_TENTS] = {13, 14};

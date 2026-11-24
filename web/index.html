@@ -103,7 +103,7 @@ canvas{width:100%;height:190px;display:block}
 <li>Empezá corto, mirá el peso de la maceta y el drenaje, y subí de a poco. Para más adelante se puede sumar un sensor de humedad de suelo o de nivel del tanque.</li>
 </ul></details>
 <div class="card" id="tankCard"><div class="rhead"><h3>🛢️ Tanque</h3><span class="big" id="tankPct" style="font-size:1.35rem"></span></div><div class="mut" id="tankLive" style="margin-top:4px"></div><div id="tankCfg"></div></div>
-<div class="card" id="soilCard"><div class="rhead"><h3>🪴 Humedad de suelo</h3><span class="big" id="soilPct" style="font-size:1.35rem"></span></div><div class="mut" id="soilLive" style="margin-top:4px"></div><div id="soilCfg"></div></div>
+<div class="card" id="soilCard" hidden><div class="rhead"><h3>🪴 Humedad de suelo</h3><span class="big" id="soilPct" style="font-size:1.35rem"></span></div><div class="mut" id="soilLive" style="margin-top:4px"></div><div id="soilCfg"></div></div>
 <div id="irrig"></div></section>
 
 <section id="historial"><h2>📈 Historial</h2>
@@ -271,8 +271,9 @@ function renderHome(){
  $('dayLbl').textContent=tentS().day?'☀️ Día':'🌙 Noche';
  $('clk').textContent=S.time.valid?S.time.local.slice(11,16):'sin hora';$('clkS').textContent=S.time.valid?S.time.local.slice(0,10):'';
  $('hdrTime').textContent=S.time.valid?S.time.local.slice(11,16):'';
- const sn=tentS().sensors.map(x=>x.valid?`${x.model} 0x${x.addr.toString(16)}: ${x.temperature}° ${x.humidity}%`:`<span class="bad">0x${x.addr.toString(16)} sin sensor</span>`).join(' · ');
- $('sens').innerHTML=(c.valid?`Punto de rocío ${c.dewPoint} °C · `:`<span class="bad">Sin lectura de clima</span> · `)+sn;
+ const sv=x=>x.kind=='co2'?`${x.co2} ppm`:x.kind=='lux'?`${Number(x.lux).toLocaleString('es-AR')} lx`:`${x.temperature}° ${x.humidity}%`;
+ const sl=tentS().sensors||[],sn=sl.length?sl.map(x=>`<b>${esc(x.name)}</b> ${x.valid?sv(x):'<span class="mut">esperando lectura</span>'} <span class="mut">(${x.model})</span>`).join(' · '):'<span class="bad">No se detectó ningún sensor: revisá el cable de la carpa</span>';
+ $('sens').innerHTML=(c.valid?`Punto de rocío ${c.dewPoint} °C · `:sl.length?`<span class="bad">Sin lectura de clima</span> · `:'')+sn;
  const R=mine();$('relays').innerHTML=R.length?R.map(([r,i])=>relayLine(r,i,r.present?'':' · <span class="bad">módulo no conectado</span>')).join(''):'<div class="empty">No hay relés en esta carpa. Asignalos en Ajustes.</div>';
  // resumen por sección
  const L=idx(['light']),F=idx(['fan_in','fan_out']),I=idx(['irrigation']);
@@ -382,20 +383,22 @@ function soilOpts(i){const t=C.tents[C.relays[i].tent];if(!t.soil.enabled)return
  <div class="row"><label>Duración del riego extra (s)<input type="number" id="sd${i}" min="1" max="3600" value="${o.dur}"></label><label>Máximo de riegos extra por día<input type="number" id="sm${i}" min="1" max="12" value="${o.max}"></label></div>
  <div class="mut">0 = no usar esa opción. Los riegos extra solo se hacen en Auto, con luces prendidas y con al menos 1 h entre uno y otro. Un buen punto de partida: saltear arriba de 60 %, regar extra debajo de 30 %.</div></details>`}
 function renderSoil(){const cfg=tentC().soil,st=tentS().soil;
- $('soilPct').textContent=st&&st.valid?st.percent+' %':'';
- $('soilLive').innerHTML=!cfg.enabled?'Opcional: con 2 o 3 sensores capacitivos por carpa el equipo puede saltear riegos si la tierra está húmeda y regar si se seca.':
-  !st||!st.present?'<span class="bad">No responde el ADS1115 de esta carpa (ver docs/hardware.md).</span>':
-  st.sensors.map((x,k)=>`Sensor ${k+1}: ${x.valid?x.percent+' % <span class="mut">('+x.raw+')</span>':'<span class="bad">sin lectura</span>'}`).join(' · ');
+ // La tarjeta aparece sola cuando hay un sensor enchufado (o si el control quedó prendido sin sensor).
+ $('soilCard').hidden=!st;if(!st)return;
+ $('soilPct').textContent=st.valid?st.percent+' %':'';
+ $('soilLive').innerHTML=st.valid?st.sensors.map(x=>`Sensor ${x.n}: ${x.percent} % <span class="mut">(${x.raw} mV)</span>`).join(' · '):'<span class="bad">El control está prendido pero no hay ningún sensor conectado.</span>';
  if(dirty.has('riego'))return;
- $('soilCfg').innerHTML=`<label style="display:flex;gap:8px;align-items:center;color:var(--fg);margin-top:10px"><input type="checkbox" id="soEn" ${cfg.enabled?'checked':''} onchange="$('soMore').hidden=!this.checked"> Tengo sensores de suelo en esta carpa</label>
- <div id="soMore" ${cfg.enabled?'':'hidden'}><div class="row"><label>Sensores conectados (A0 en adelante)<select id="soN">${[1,2,3,4].map(n=>`<option ${n==cfg.count?'selected':''}>${n}</option>`).join('')}</select></label>
- <label>Lectura en seco (0 %)<input type="number" id="soDry" value="${cfg.dry}"></label><label>Lectura en agua (100 %)<input type="number" id="soWet" value="${cfg.wet}"></label></div>
- <details class="tip" style="margin:8px 0"><summary>Cómo calibrar (2 minutos)</summary><ol style="margin:8px 0;padding-left:20px;line-height:1.5">
- <li>Con los sensores al aire y secos, tocá <b>Seco = lectura actual</b>.</li><li>Metelos en un vaso de agua hasta la línea (no más), esperá 30 s y tocá <b>Mojado = lectura actual</b>.</li><li>Guardá y clavalos en las macetas, a la misma profundidad y lejos del gotero.</li></ol></details>
- <div class="actions"><button class="btn sec" data-dirty onclick="soilCal('soDry')">Seco = lectura actual</button><button class="btn sec" data-dirty onclick="soilCal('soWet')">Mojado = lectura actual</button></div></div>
+ $('soilCfg').innerHTML=`<label style="display:flex;gap:8px;align-items:center;color:var(--fg);margin-top:10px"><input type="checkbox" id="soEn" ${cfg.enabled?'checked':''}> Control del riego por sensor de suelo</label>
+ <div class="mut" style="margin:4px 0 0 26px">El riego lo sigue mandando el horario. Prendido, cada riego puede saltearse si la maceta sigue mojada o dar uno extra si se seca (se ajusta en cada bomba). Apagado, solo se mide y queda en el historial.</div>
+ <div class="row"><label>Avisar por Telegram si baja de (%)<input type="number" id="soAl" min="0" max="90" value="${cfg.alert}"></label></div>
+ <details class="tip" style="margin:8px 0"><summary>Calibrar (2 minutos)</summary>
+ <div class="row"><label>Lectura en seco, 0 % (mV)<input type="number" id="soDry" value="${cfg.dry}"></label><label>Lectura en agua, 100 % (mV)<input type="number" id="soWet" value="${cfg.wet}"></label></div>
+ <ol style="margin:8px 0;padding-left:20px;line-height:1.5">
+ <li>Con todo el cable ya instalado y los sensores al aire y secos, tocá <b>Seco = lectura actual</b>.</li><li>Metelos en un vaso de agua hasta la línea (no más), esperá 30 s y tocá <b>Mojado = lectura actual</b>.</li><li>Guardá y clavalos en las macetas, a la misma profundidad y lejos del gotero.</li></ol>
+ <div class="actions"><button class="btn sec" data-dirty onclick="soilCal('soDry')">Seco = lectura actual</button><button class="btn sec" data-dirty onclick="soilCal('soWet')">Mojado = lectura actual</button></div></details>
  <div class="actions"><button class="btn" onclick="saveSoil()">Guardar</button></div>`}
 function soilCal(id){const st=tentS().soil;if(!st||!st.valid)return toast('No hay lectura de los sensores',true);$(id).value=st.raw;toast('Cargado, falta guardar')}
-async function saveSoil(){const tents=C.tents.map(()=>({}));tents[TENT]={soil:{enabled:$('soEn').checked,count:+$('soN').value,dry:+$('soDry').value,wet:+$('soWet').value}};
+async function saveSoil(){const tents=C.tents.map(()=>({}));tents[TENT]={soil:{enabled:$('soEn').checked,alert:+$('soAl').value,dry:+$('soDry').value,wet:+$('soWet').value}};
  C=await call('/api/config',{tents},'Sensores de suelo guardados');dirty.delete('riego');await refresh()}
 function irrigStatus(r){return (r.mode=='auto'?esc(r.reason):'Modo manual. Pasalo a Auto para que riegue según la tabla.')+(r.pulse?' · regando, faltan '+dur(r.pulse):'')}
 function evRow(e){return `<tr><td><input type="time" value="${e.start}" data-k="start"></td><td><input type="number" min="1" max="3600" value="${e.dur}" data-k="dur" oninput="evTotal()"></td><td><input type="checkbox" ${e.en?'checked':''} data-k="en" onchange="evTotal()"></td><td><button class="btn sec sm" data-dirty onclick="this.closest('tr').remove();evTotal()">✕</button></td></tr>`}

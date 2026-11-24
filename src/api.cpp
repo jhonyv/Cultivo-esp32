@@ -49,17 +49,39 @@ static void statusJson(JsonDocument& doc) {
       cl["dewPoint"] = serialized(String(c.dewPoint, 1));
       cl["age"] = (millis() - c.updatedMs) / 1000;
     }
-    JsonArray sensors = o["sensors"].to<JsonArray>();
-    for (uint8_t k = 0; k < SENSORS_PER_TENT; k++) {
+    if (c.hasCo2) cl["co2"] = lroundf(c.co2);
+    if (c.hasLux) cl["lux"] = lroundf(c.lux);
+    // Solo los sensores detectados, con nombre automático ("Temp/Hum 1", "CO₂", "Luz").
+    uint8_t thCount = 0, thIndex = 0;
+    for (uint8_t k = 0; k < SENSOR_SLOTS; k++) {
       SensorReading r = sensorReading(t, k);
+      if (r.present && r.kind == SensorKind::TempHum) thCount++;
+    }
+    JsonArray sensors = o["sensors"].to<JsonArray>();
+    for (uint8_t k = 0; k < SENSOR_SLOTS; k++) {
+      SensorReading r = sensorReading(t, k);
+      if (!r.present) continue;
       JsonObject so = sensors.add<JsonObject>();
+      switch (r.kind) {
+        case SensorKind::TempHum:
+          thIndex++;
+          if (thCount > 1) so["name"] = String("Temp/Hum ") + String(thIndex);
+          else so["name"] = "Temp/Hum";
+          break;
+        case SensorKind::Co2: so["name"] = "CO₂"; break;
+        case SensorKind::Light: so["name"] = "Luz"; break;
+      }
+      so["kind"] = r.kind == SensorKind::Co2 ? "co2" : r.kind == SensorKind::Light ? "lux" : "th";
       so["model"] = r.model;
       so["addr"] = r.address;
       so["valid"] = r.valid;
-      if (r.valid) {
+      if (!r.valid) continue;
+      if (r.kind != SensorKind::Light) {
         so["temperature"] = serialized(String(r.temperature, 1));
         so["humidity"] = serialized(String(r.humidity, 1));
       }
+      if (r.kind == SensorKind::Co2) so["co2"] = lroundf(r.co2);
+      if (r.kind == SensorKind::Light) so["lux"] = lroundf(r.lux);
     }
     if (settings.tents[t].tank.enabled) {
       const TankReading& k = tank(t);
@@ -72,23 +94,23 @@ static void statusJson(JsonDocument& doc) {
       }
       tk["low"] = tankLow(t);
     }
-    if (settings.tents[t].soil.enabled) {
+    if (soilPresent(t) || settings.tents[t].soil.enabled) {
       const SoilReading& s = soil(t);
       JsonObject so = o["soil"].to<JsonObject>();
-      so["present"] = soilPresent(t);
       so["valid"] = s.valid;
+      so["control"] = settings.tents[t].soil.enabled;
       if (s.valid) {
         so["percent"] = serialized(String(s.percent, 0));
         so["raw"] = s.raw;
       }
+      // Solo los sensores enchufados.
       JsonArray ch = so["sensors"].to<JsonArray>();
-      for (uint8_t k = 0; k < settings.tents[t].soil.count; k++) {
+      for (uint8_t k = 0; k < SOIL_SENSORS_MAX; k++) {
+        if (!s.chValid[k]) continue;
         JsonObject c = ch.add<JsonObject>();
-        c["valid"] = s.chValid[k];
-        if (s.chValid[k]) {
-          c["percent"] = serialized(String(s.chPercent[k], 0));
-          c["raw"] = s.chRaw[k];
-        }
+        c["n"] = k + 1;
+        c["percent"] = serialized(String(s.chPercent[k], 0));
+        c["raw"] = s.chRaw[k];
       }
     }
   }
