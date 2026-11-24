@@ -179,6 +179,8 @@ let TENT=0;try{TENT=+localStorage.getItem('cultivoTent')||0}catch(e){}
 const dirty=new Set();
 const markDirty=e=>{const el=e.target;if(el.closest('[data-nodirty]'))return;const sec=el.closest('section');if(sec)dirty.add(sec.id)};
 document.addEventListener('input',markDirty);document.addEventListener('change',markDirty);
+// Al elegir una opción, soltar el foco para que el panel vuelva a actualizarse solo.
+document.addEventListener('change',e=>{if(e.target.tagName=='SELECT')e.target.blur()});
 document.addEventListener('click',e=>{if(e.target.closest('.chip,[data-dirty]'))markDirty(e)});
 
 async function realApi(p,b){const r=await fetch(p,b===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
@@ -549,7 +551,10 @@ window.addEventListener('resize',()=>{if(location.hash=='#historial')renderHist(
 window.addEventListener('hashchange',()=>{if(location.hash=='#historial')loadRange()});
 
 // ---------- ciclo ----------
-async function refresh(){try{S=await api('/api/status');if(!C)C=await api('/api/config');renderAll()}catch(e){}}
+// Mientras el usuario tiene abierto un desplegable o está escribiendo en un campo, no redibujar:
+// el redibujo cada 3 s cerraba los menús y borraba lo que se estaba eligiendo.
+const editing=()=>{const a=document.activeElement;return !!(a&&/^(SELECT|INPUT|TEXTAREA)$/.test(a.tagName)&&a.closest('section'))};
+async function refresh(){try{S=await api('/api/status');if(!C)C=await api('/api/config');if(!editing())renderAll()}catch(e){}}
 async function loadHistory(){try{H=await api('/api/history?tent='+TENT);drawChart()}catch(e){}}
 function start(){show();refresh();loadHistory();if(location.hash=='#historial')loadRange();setInterval(refresh,CLOUD?5000:3000);setInterval(loadHistory,CLOUD?300000:60000)}
 if(CLOUD){document.body.classList.add('cloud');const c=cloudCreds();if(c)cloudConnect(c).then(start,e=>showLogin(e.message));else showLogin()}else start();
