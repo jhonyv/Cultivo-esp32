@@ -4,10 +4,17 @@
 // Ver docs/hardware.md para el esquema de conexión.
 
 #define NUM_TENTS 2
-#define NUM_RELAYS 16
-// Relés 1-8 directo en GPIO; relés 9-16 por un expansor PCF8574 en el bus I2C principal.
-#define NUM_GPIO_RELAYS 8
-static const uint8_t RELAY_PINS[NUM_GPIO_RELAYS] = {16, 17, 18, 19, 23, 25, 26, 27};
+// Relés por carpa. Se elige con el environment de PlatformIO:
+//   cultivo-4 (por defecto): 4 por carpa, 8 en total, todos directo al ESP32.
+//   cultivo-8: 8 por carpa, 16 en total; los relés 9-16 van por un expansor PCF8574.
+#ifndef RELAYS_PER_TENT
+#define RELAYS_PER_TENT 4
+#endif
+#define NUM_RELAYS (RELAYS_PER_TENT * NUM_TENTS)
+// Los primeros 8 relés van directo en GPIO (con 4 por carpa: carpa 1 = 16-19, carpa 2 = 23-27).
+static const uint8_t RELAY_PINS[8] = {16, 17, 18, 19, 23, 25, 26, 27};
+#define NUM_GPIO_RELAYS (NUM_RELAYS < 8 ? NUM_RELAYS : 8)
+#define HAS_RELAY_EXPANDER (NUM_RELAYS > NUM_GPIO_RELAYS)
 #define PCF8574_ADDR 0x20
 
 // Bus I2C principal: DS3231, PCF8574 y los sensores de la carpa 1.

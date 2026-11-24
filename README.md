@@ -1,19 +1,29 @@
 # Cultivo-esp32
 
-Controlador de carpa de cultivo con ESP32: 8 relés (luces, extractor/intractor, riego y 3 asignables), sensor SHT40/SHT31 de temperatura y humedad con cálculo de VPD, reloj DS3231 de respaldo y panel web.
+Controlador para 2 carpas de cultivo con ESP32: **4 relés por carpa** (Luz, Extractor, Intractor y Riego, cada uno reasignable), sensores que se detectan solos en cada carpa (SHT40/SHT31 con VPD, CO₂, luz, humedad de suelo), reloj DS3231 de respaldo y panel web. La página tiene un selector Carpa 1 / Carpa 2 y cada carpa lleva su clima, horarios, alertas e historial.
 
-Se amplía a **2 carpas y 16 relés** sumando un PCF8574 y un segundo módulo de relés, con hasta 2 sensores SHT por carpa (promediados). La página tiene un selector Carpa 1 / Carpa 2 y cada carpa lleva su clima, horarios, alertas e historial. Ver [docs/hardware.md](docs/hardware.md).
+Hay una versión de **8 relés por carpa** (16 en total, con un expansor PCF8574) para más adelante.
 
 - Hardware, lista de compras y pines: [docs/hardware.md](docs/hardware.md)
+- Cajas para imprimir en 3D: [cases/](cases)
 
 ## Compilar y cargar
 
 Con [PlatformIO](https://platformio.org/) (VS Code + extensión PlatformIO, o CLI):
 
 ```
-pio run -t upload
+pio run -t upload        # versión de 4 relés por carpa (cultivo-4, la de siempre)
 pio device monitor
 ```
+
+Hay dos versiones del firmware, iguales salvo la cantidad de relés:
+
+| Environment | Relés |
+|---|---|
+| `cultivo-4` (por defecto, la que sube el botón de VS Code) | 4 por carpa, 8 en total, directo al ESP32 |
+| `cultivo-8` | 8 por carpa, 16 en total, los 9-16 por un PCF8574 |
+
+Para la de 8: `pio run -e cultivo-8 -t upload`, o elegí `env:cultivo-8` en la barra de abajo de VS Code. Al cambiar de versión, los relés vuelven a sus nombres por defecto y el resto de la configuración queda.
 
 ## Primer uso
 
@@ -28,7 +38,7 @@ Si el WiFi falla, la red `Cultivo-XXXX` vuelve a aparecer para reconfigurarlo. M
 
 - **Inicio:** temperatura, humedad y VPD contra los objetivos, día/noche, gráfico de las últimas 24 h y control rápido de cada relé (Off / Auto / On).
 - **Iluminación:** un horario para todas las luces de la carpa (cada luz con su Off / Auto / On): 12/12, 16/8, 18/6, 20/4 o personalizado (horas prendida/apagada libres, por ej. 13/13) y hora de encendido.
-- **Temperatura y humedad:** rangos de día y de noche (con presets por etapa); la humedad se controla por **VPD objetivo** (humidificador/deshumidificador), la temperatura con aire acondicionado/calefactor; histéresis y renovación de aire. Cada extractor/intractor trabaja **por clima** (prende si hace calor, si hay humedad de más o en la renovación), **por horario** (franjas) o **permanente** (24/7); las salidas asignables pueden ser humidificador, deshumidificador, calefactor o aire acondicionado (prende con calor junto con los coolers; pensado para el aire de la sala).
+- **Temperatura y humedad:** rangos de día y de noche (con presets por etapa); la humedad se controla por **VPD objetivo** (humidificador/deshumidificador), la temperatura con aire acondicionado/calefactor; histéresis y renovación de aire. Cada extractor/intractor trabaja **por clima** (prende si hace calor, si hay humedad de más o en la renovación), **por horario** (franjas) o **permanente** (24/7); cualquier salida se puede pasar a humidificador, deshumidificador, calefactor o aire acondicionado (prende con calor junto con los coolers; pensado para el aire de la sala).
 - **Riego:** hasta 12 riegos por salida (hora + segundos), “Regar ahora”, una guía rápida y un **plan por etapa** (vegetativo, estiramiento, flora media, flora tardía; coco o tierra) que arma P0/P1/P2/P3 con los segundos justos según el caudal calibrado de la bomba, las macetas y sus litros.
 - **Historial:** día (cada 5 min), semana (por hora) y mes (por día) con temperatura, humedad y VPD (promedio y mín–máx), más horas de luz, coolers y tiempo de riego por día. Semana y mes se guardan en la flash y sobreviven cortes de luz (35 días).
 - **Ajustes:** WiFi, nombres y función de cada relé, polaridad del módulo, offset de hoja, clave del AP y zona horaria.

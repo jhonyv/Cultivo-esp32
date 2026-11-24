@@ -63,7 +63,7 @@ static void formatHHMM(char* buf, size_t len, int minutes) { snprintf(buf, len, 
 static void setRelay(uint8_t i, const char* name, RelayType type) {
   RelayConfig& r = settings.relays[i];
   strlcpy(r.name, name, sizeof(r.name));
-  r.tent = i / 8;
+  r.tent = i / RELAYS_PER_TENT;
   r.type = type;
   r.mode = RelayMode::Off;
   r.light = {18 * 60, 6 * 60, anchorFromStart(6 * 60)};
@@ -76,17 +76,28 @@ static void setRelay(uint8_t i, const char* name, RelayType type) {
 }
 
 static void settingsDefaults() {
-  // Cada carpa arranca con la misma distribución: 2 luces, extractor, intractor, riego (una bomba) y 3 asignables.
+  // Cada carpa arranca con la misma distribución. Todo se puede cambiar después en Ajustes > Relés.
   for (uint8_t t = 0; t < NUM_TENTS; t++) {
-    uint8_t b = t * 8;
+    uint8_t b = t * RELAYS_PER_TENT;
+#if RELAYS_PER_TENT >= 8
+    // 2 luces, extractor, intractor, riego (una bomba) y 3 asignables.
     setRelay(b + 0, "Luz 1", RelayType::Light);
     setRelay(b + 1, "Luz 2", RelayType::Light);
     setRelay(b + 2, "Extractor", RelayType::FanOut);
     setRelay(b + 3, "Intractor", RelayType::FanIn);
     setRelay(b + 4, "Riego", RelayType::Irrigation);
-    setRelay(b + 5, "Asignable 1", RelayType::Generic);
-    setRelay(b + 6, "Asignable 2", RelayType::Generic);
-    setRelay(b + 7, "Asignable 3", RelayType::Generic);
+    for (uint8_t k = 5; k < RELAYS_PER_TENT; k++) {
+      char name[16];
+      snprintf(name, sizeof(name), "Asignable %u", k - 4);
+      setRelay(b + k, name, RelayType::Generic);
+    }
+#else
+    // Luz, extractor, intractor y riego.
+    setRelay(b + 0, "Luz", RelayType::Light);
+    setRelay(b + 1, "Extractor", RelayType::FanOut);
+    setRelay(b + 2, "Intractor", RelayType::FanIn);
+    setRelay(b + 3, "Riego", RelayType::Irrigation);
+#endif
 
     TentConfig& tc = settings.tents[t];
     snprintf(tc.name, sizeof(tc.name), "Carpa %u", t + 1);
@@ -494,7 +505,15 @@ void settingsBegin() {
 
   JsonDocument doc;
   String error;
-  if (deserializeJson(doc, json) || !settingsFromJson(doc.as<JsonObjectConst>(), error)) {
+  bool bad = deserializeJson(doc, json);
+  // Config guardada por la otra versión (4 u 8 relés por carpa): se conserva todo menos los relés,
+  // que arrancan con la distribución por defecto de esta versión.
+  if (!bad && doc["relays"].is<JsonArray>() && doc["relays"].size() != NUM_RELAYS) {
+    Serial.printf("[cfg] la config guardada tiene %u relés y esta versión %u: relés por defecto\n", (unsigned)doc["relays"].size(),
+                  (unsigned)NUM_RELAYS);
+    doc.remove("relays");
+  }
+  if (bad || !settingsFromJson(doc.as<JsonObjectConst>(), error)) {
     Serial.println("[cfg] config guardada inválida, uso valores por defecto");
     settingsDefaults();
   }

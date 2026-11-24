@@ -126,7 +126,7 @@ canvas{width:100%;height:190px;display:block}
 <div class="actions"><button class="btn" onclick="saveWifi()">Conectar</button><button class="btn sec" onclick="forget()">Olvidar red</button><span class="mut" id="wmsg"></span></div>
 <div class="tip" style="margin-top:10px"><b>¿No hay WiFi en el lugar?</b> Usá el <b>modo offline</b>: la red propia <b class="apN">Cultivo-XXXX</b> queda siempre prendida, todo sigue andando (relés, sensores, horarios con el reloj) y entrás conectando el celular a esa red y abriendo <b>192.168.4.1</b>. La nube y Telegram no andan en este modo.</div>
 <div class="actions"><button class="btn sec" onclick="apOnly()">📴 Activar modo offline (sin WiFi)</button></div></div>
-<div class="card"><h3>Carpas</h3><div class="mut">La carpa 2 usa los relés 9-16 (módulo por PCF8574) y los sensores del segundo bus I2C.</div><div id="cfgt"></div></div>
+<div class="card"><h3>Carpas</h3><div class="mut">La carpa 2 usa los sensores del segundo bus I2C. A qué carpa va cada relé se elige en la tabla de abajo.</div><div id="cfgt"></div></div>
 <div class="card"><h3>Relés</h3><div class="mut">Nombre, función y carpa de cada salida, agrupadas por carpa. Si le cambiás la carpa a un relé, pasa al otro grupo al guardar.</div><div style="overflow-x:auto"><table id="cfgr"></table></div></div>
 <div class="card"><h3>Equipo</h3>
 <div class="row"><label>Offset de hoja para VPD (°C)<input id="leaf" type="number" step="0.1"></label>
