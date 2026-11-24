@@ -30,7 +30,7 @@ struct Alert {
   bool sent;
 };
 
-static const uint8_t NUM_ALERTS = 8;
+static const uint8_t NUM_ALERTS = 9;
 static const Alert ALERT_TEXTS[NUM_ALERTS] = {
     {"🔥 Temperatura alta", "✅ Temperatura normal otra vez", 0, false},
     {"🥶 Temperatura baja", "✅ Temperatura normal otra vez", 0, false},
@@ -40,6 +40,7 @@ static const Alert ALERT_TEXTS[NUM_ALERTS] = {
     {"⚠️ Los sensores de suelo no responden", "✅ Los sensores de suelo volvieron a responder", 0, false},
     {"🛢️ Tanque bajo", "✅ Tanque cargado otra vez", 0, false},
     {"⚠️ El sensor del tanque no responde", "✅ El sensor del tanque volvió a responder", 0, false},
+    {"🏜️ La tierra se secó de más", "✅ La tierra volvió a tener humedad", 0, false},
 };
 static Alert alerts[NUM_TENTS][NUM_ALERTS];
 
@@ -78,11 +79,9 @@ static String statusText() {
     } else {
       s += "⚠️ Sin lectura de los sensores\n";
     }
-    if (settings.tents[t].soil.enabled) {
-      const SoilReading& so = soil(t);
-      if (so.valid) s += "🪴 Suelo " + String(so.percent, 0) + " %\n";
-      else s += "⚠️ Sin lectura de suelo\n";
-    }
+    const SoilReading& so = soil(t);
+    if (so.valid) s += "🪴 Suelo " + String(so.percent, 0) + " %\n";
+    else if (settings.tents[t].soil.enabled) s += "⚠️ Sin lectura de suelo\n";
     if (settings.tents[t].tank.enabled) {
       const TankReading& k = tank(t);
       if (k.valid) s += "🛢️ Tanque " + String(k.percent, 0) + " % (" + String(k.liters, 0) + " l)\n";
@@ -212,6 +211,7 @@ static void checkAlerts() {
         settings.tents[tent].soil.enabled && !soil(tent).valid,
         tk.enabled && tk.alertPct && tank(tent).valid && tank(tent).percent < tk.alertPct,
         tk.enabled && !tank(tent).valid,
+        settings.tents[tent].soil.alertBelow && soil(tent).valid && soil(tent).percent < settings.tents[tent].soil.alertBelow,
     };
     String prefix = String(settings.tents[tent].name) + ": ";
     for (uint8_t i = 0; i < NUM_ALERTS; i++) {

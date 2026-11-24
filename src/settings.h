@@ -86,12 +86,12 @@ struct ClimateConfig {
   uint16_t ventOnMin, ventEveryMin;  // renovación de aire: extractor X min cada Y min (0 = desactivado)
 };
 
-// Sensores capacitivos de suelo (opcional). Calibración en cuentas del ADS1115.
+// Sensores capacitivos de suelo (opcional). Calibración en mV del pin analógico.
 struct SoilConfig {
-  bool enabled;
-  uint8_t count;  // sensores conectados en A0..A(count-1)
-  uint16_t dry;   // lectura al aire (0 %)
-  uint16_t wet;   // lectura en un vaso de agua (100 %)
+  bool enabled;  // "Control por sensor de suelo": saltear riegos / riego extra. La lectura se muestra igual.
+  uint16_t dry;  // mV al aire (0 %)
+  uint16_t wet;  // mV en un vaso de agua (100 %)
+  uint8_t alertBelow;  // aviso por Telegram si el promedio baja de este % (0 = sin aviso)
 };
 
 // Tanque de riego con sensor ultrasónico en la tapa (opcional).

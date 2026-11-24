@@ -157,13 +157,14 @@ static void updateIrrigation(time_t now, bool clockOk) {
       continue;
     }
     const SoilReading& s = soil(r.tent);
+    bool soilOk = settings.tents[r.tent].soil.enabled && s.valid;  // control por sensor de suelo prendido
     if (soilDay[i] != today) soilDay[i] = today, soilWaterings[i] = 0;
 
     int8_t ev = clockOk ? activeEvent(r, now) : -1;
     if (ev + 1 != decidedEvent[i]) {
       // Arranca un riego programado: con la tierra todavía húmeda se saltea entero.
       decidedEvent[i] = ev + 1;
-      skipEvent[i] = ev >= 0 && r.soil.skipAbove && s.valid && s.percent >= r.soil.skipAbove;
+      skipEvent[i] = ev >= 0 && r.soil.skipAbove && soilOk && s.percent >= r.soil.skipAbove;
       if (skipEvent[i]) Serial.printf("[riego] %s: tierra al %.0f %%, riego salteado\n", r.name, s.percent);
     }
     bool on = ev >= 0 && !skipEvent[i];
@@ -177,7 +178,7 @@ static void updateIrrigation(time_t now, bool clockOk) {
     relaySetAuto(i, on);
 
     // Riego extra cuando la tierra se seca, solo en Auto, con luces prendidas y respetando el tope diario.
-    bool dry = r.soil.waterBelow && s.valid && s.percent < r.soil.waterBelow;
+    bool dry = r.soil.waterBelow && soilOk && s.percent < r.soil.waterBelow;
     if (dry && !on && r.mode == RelayMode::Auto && isDay[r.tent] && !relayPulseRemaining(i) &&
         soilWaterings[i] < r.soil.maxPerDay && (!soilWatered[i] || millis() - lastSoilWater[i] > SOIL_MIN_GAP_MS)) {
       relayPulse(i, r.soil.durSec);
@@ -187,13 +188,13 @@ static void updateIrrigation(time_t now, bool clockOk) {
       Serial.printf("[riego] %s: tierra al %.0f %%, riego extra de %u s\n", r.name, s.percent, r.soil.durSec);
     }
 
-    if (!clockOk && !r.soil.waterBelow) reasons[i] = "sin hora";
+    if (!clockOk && !(r.soil.waterBelow && settings.tents[r.tent].soil.enabled)) reasons[i] = "sin hora";
     else if (on) reasons[i] = "regando";
     else if (ev >= 0) reasons[i] = "tierra húmeda: riego salteado";
     else if (relayPulseRemaining(i) && dry) reasons[i] = "tierra seca: riego extra";
     else if (dry && soilWaterings[i] >= r.soil.maxPerDay) reasons[i] = "tierra seca, tope de riegos extra del día";
     else if (dry && !isDay[r.tent]) reasons[i] = "tierra seca, espera a que prendan las luces";
-    else if (r.soil.waterBelow && s.valid) reasons[i] = "esperando próximo riego o que se seque la tierra";
+    else if (r.soil.waterBelow && soilOk) reasons[i] = "esperando próximo riego o que se seque la tierra";
     else reasons[i] = "esperando próximo riego";
   }
 }
